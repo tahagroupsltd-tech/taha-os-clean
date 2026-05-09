@@ -1,0 +1,313 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+  CLIENT
+}
+
+enum ProjectStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ContentType {
+  REEL
+  POSTER
+  STORY
+  VIDEO
+  GRAPHIC
+}
+
+enum ContentStatus {
+  IDEA
+  SCRIPTING
+  SHOOTING
+  EDITING
+  REVIEW
+  POSTED
+}
+
+enum EventType {
+  MEETING
+  SHOOT
+  DEADLINE
+  REVIEW
+  CALL
+  OTHER
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionCategory {
+  CLIENT_PAYMENT
+  SALARY
+  EQUIPMENT
+  SOFTWARE
+  MARKETING
+  TRAVEL
+  RENT
+  UTILITIES
+  OTHER
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  phone        String?   @unique
+  password     String
+  role         Role      @default(EMPLOYEE)
+  name         String
+  avatar       String?
+  isActive     Boolean   @default(true)
+  // Google Calendar: null = no reminder, any positive int = popup X minutes before
+  calendarReminderMins Int?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  tasksAssigned   Task[]    @relation("AssignedTo")
+  tasksCreated    Task[]    @relation("CreatedBy")
+  projects        Project[] @relation("ClientProjects")
+  contentItems    Content[] @relation("ContentAssignee")
+  contentCreated  Content[] @relation("ContentCreator")
+  events          Event[]   @relation("EventOwner")
+  notes           Note[]    @relation("NoteOwner")
+  transactions    Transaction[] @relation("TransactionOwner")
+  reports         DailyReport[] @relation("ReportOwner")
+  notifications   Notification[] @relation("NotificationRecipient")
+  gcalToken       GoogleCalendarToken?
+
+  @@map("users")
+}
+
+model GoogleCalendarToken {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("google_calendar_tokens")
+}
+
+// Tracks which Google Calendar event corresponds to each task/content item per user.
+// This allows us to update or delete the event when the item changes.
+model CalendarEventLink {
+  id          String   @id @default(cuid())
+  userId      String
+  entityType  String   // 'task' | 'content'
+  entityId    String
+  role        String   // 'assignee' | 'manager'
+  gcalEventId String
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, entityType, entityId, role])
+  @@index([entityType, entityId])
+  @@map("calendar_event_links")
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+  clientId    String?
+  startDate   DateTime?
+  dueDate     DateTime?
+  driveFolder String?       // Google Drive folder URL for this project
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  client       User?     @relation("ClientProjects", fields: [clientId], references: [id])
+  tasks        Task[]
+  content      Content[]
+  events       Event[]
+  notes        Note[]
+  transactions Transaction[]
+
+  @@map("projects")
+}
+
+model Task {
+  id           String       @id @default(cuid())
+  title        String
+  description  String?
+  status       TaskStatus   @default(TODO)
+  priority     TaskPriority @default(MEDIUM)
+  deadline     DateTime?
+  assignedToId String?
+  createdById  String
+  projectId    String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // Relations
+  assignedTo   User?    @relation("AssignedTo", fields: [assignedToId], references: [id])
+  createdBy    User     @relation("CreatedBy", fields: [createdById], references: [id])
+  project      Project? @relation(fields: [projectId], references: [id])
+
+  @@map("tasks")
+}
+
+model Content {
+  id           String        @id @default(cuid())
+  title        String
+  type         ContentType
+  status       ContentStatus @default(IDEA)
+  description  String?
+  driveLink    String?
+  caption      String?
+  postDate     DateTime?
+  assigneeId   String?
+  createdById  String
+  projectId    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Relations
+  assignee     User?    @relation("ContentAssignee", fields: [assigneeId], references: [id])
+  createdBy    User     @relation("ContentCreator", fields: [createdById], references: [id])
+  project      Project? @relation(fields: [projectId], references: [id])
+
+  @@map("content")
+}
+
+model Event {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  type        EventType @default(MEETING)
+  startTime   DateTime
+  endTime     DateTime
+  location    String?
+  meetingLink String?
+  ownerId     String
+  projectId   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  owner       User     @relation("EventOwner", fields: [ownerId], references: [id])
+  project     Project? @relation(fields: [projectId], references: [id])
+
+  @@index([startTime])
+  @@index([ownerId])
+  @@map("events")
+}
+
+model Note {
+  id          String   @id @default(cuid())
+  title       String
+  content     String   @default("")
+  icon        String?  @default("📝")
+  pinned      Boolean  @default(false)
+  tags        String[] @default([])
+  ownerId     String
+  projectId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner       User     @relation("NoteOwner", fields: [ownerId], references: [id])
+  project     Project? @relation(fields: [projectId], references: [id])
+
+  @@index([ownerId])
+  @@map("notes")
+}
+
+model Transaction {
+  id          String              @id @default(cuid())
+  title       String
+  amount      Decimal             @db.Decimal(12, 2)
+  type        TransactionType
+  category    TransactionCategory @default(OTHER)
+  notes       String?
+  date        DateTime            @default(now())
+  ownerId     String
+  projectId   String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  owner       User     @relation("TransactionOwner", fields: [ownerId], references: [id])
+  project     Project? @relation(fields: [projectId], references: [id])
+
+  @@index([date])
+  @@index([ownerId])
+  @@map("transactions")
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_UPDATED
+  TASK_COMPLETED
+  CONTENT_ASSIGNED
+  CONTENT_SCHEDULED
+  CONTENT_POSTED
+  PROJECT_ASSIGNED
+  PROJECT_UPDATED
+  GENERAL
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      NotificationType @default(GENERAL)
+  read      Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read, createdAt])
+  @@map("notifications")
+}
+
+model DailyReport {
+  id           String   @id @default(cuid())
+  ownerId      String
+  date         DateTime @db.Date
+  summary      String
+  hoursWorked  Float?
+  blockers     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  owner        User     @relation("ReportOwner", fields: [ownerId], references: [id])
+
+  @@unique([ownerId, date])
+  @@index([date])
+  @@map("daily_reports")
+}
