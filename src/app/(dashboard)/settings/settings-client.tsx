@@ -97,10 +97,12 @@ export function SettingsClient({ currentUserId, canResetOthers, users, gcalConne
       const msg =
         gcalError === 'access_denied'
           ? 'Access denied — please grant Calendar permission.'
+          : gcalError === 'needs_revoke'
+          ? 'Please go to myaccount.google.com/permissions → remove "taha-os-clean", then try connecting again.'
           : gcalError === 'token_exchange_failed'
           ? 'Could not exchange token — try again.'
           : `Connection failed: ${gcalError}`
-      toast.error(msg)
+      toast.error(msg, { duration: 8000 })
       window.history.replaceState({}, '', '/settings')
     }
   }, [searchParams])

@@ -32,24 +32,41 @@ export function getGoogleAuthUrl(): string {
 export async function exchangeCodeAndStore(code: string, userId: string): Promise<void> {
   const client = buildOAuth2Client()
   const { tokens } = await client.getToken(code)
-  if (!tokens.access_token || !tokens.refresh_token) {
-    throw new Error('Google did not return required tokens. Re-connect and grant all permissions.')
+
+  if (!tokens.access_token) {
+    throw new Error('Google did not return an access token.')
   }
+
+  // Google only sends refresh_token on the FIRST grant (or after revoking access).
+  // On re-grants it omits it — fall back to any existing one in the DB.
+  const existing = await db.googleCalendarToken.findUnique({ where: { userId } }).catch(() => null)
+  const refreshToken = tokens.refresh_token ?? existing?.refreshToken
+
+  if (!refreshToken) {
+    // First-time grant but no refresh token returned — user needs to fully re-grant.
+    throw new Error(
+      'NEEDS_REVOKE: Please go to myaccount.google.com/permissions, revoke access for this app, then try connecting again.'
+    )
+  }
+
   await db.googleCalendarToken.upsert({
     where: { userId },
     create: {
       userId,
       accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : new Date(Date.now() + 3600_000),
+      refreshToken,
+      expiresAt: tokens.expiry_date
+        ? new Date(tokens.expiry_date)
+        : new Date(Date.now() + 3_600_000),
     },
     update: {
       accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
+      ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
       ...(tokens.expiry_date ? { expiresAt: new Date(tokens.expiry_date) } : {}),
     },
   })
 }
+
 
 /** Revoke Google access and delete stored tokens for this user. */
 export async function revokeGoogleAccess(userId: string): Promise<void> {

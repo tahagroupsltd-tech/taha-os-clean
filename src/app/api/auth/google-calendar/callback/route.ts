@@ -27,6 +27,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${appUrl}/settings?gcal=connected`)
   } catch (err: any) {
     console.error('[gcal callback]', err)
-    return NextResponse.redirect(`${appUrl}/settings?gcal_error=token_exchange_failed`)
+    const isRevoke = err?.message?.startsWith('NEEDS_REVOKE')
+    const reason = isRevoke ? 'needs_revoke' : 'token_exchange_failed'
+    return NextResponse.redirect(`${appUrl}/settings?gcal_error=${reason}`)
   }
 }
