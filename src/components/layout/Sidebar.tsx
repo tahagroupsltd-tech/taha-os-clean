@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useUIStore } from '@/store/ui.store'
 import { useState } from 'react'
+import { TAHA_LOGO } from '@/lib/logo'
 
 const NAV_ITEMS = [
   { href: '/overview',  label: 'Overview',      icon: LayoutDashboard, roles: ['ADMIN','MANAGER','EMPLOYEE','CLIENT'], color: 'text-violet-400' },
@@ -76,13 +77,14 @@ export function Sidebar() {
       >
         {/* Logo */}
         <div className="flex items-center justify-between h-14 px-4 border-b border-white/5">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
-              <span className="text-white text-[10px] font-bold">TM</span>
-            </div>
-            <span className="text-sm font-semibold text-white tracking-tight">
-              Taha Media
-            </span>
+          <div className="flex items-center gap-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={TAHA_LOGO}
+              alt="Taha Media"
+              className="h-8 w-auto"
+              style={{ filter: 'invert(1) brightness(2)' }}
+            />
           </div>
           <button
             className="lg:hidden text-white/40 hover:text-white/80"
