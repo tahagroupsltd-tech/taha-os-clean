@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-export const metadata = { title: 'AI Tools' }
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Message {

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import { Zap, CheckSquare, Calendar, BookMarked, ChevronRight, AlertTriangle, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-export const metadata = { title: 'SOP Pipeline' }
+// (page title set via layout/head — cannot export metadata from client component)
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SopLevel {
