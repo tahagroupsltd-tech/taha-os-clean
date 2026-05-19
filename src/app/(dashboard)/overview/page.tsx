@@ -181,6 +181,7 @@ export default async function OverviewPage() {
       value: stats.totalTasks,
       sub: `${stats.todoTasks} to do`,
       icon: CheckSquare,
+      iconBg: 'bg-blue-100 text-blue-600',
       alert: stats.urgentTasks > 0
         ? `${stats.urgentTasks} urgent`
         : stats.overdueTasks > 0
@@ -192,15 +193,17 @@ export default async function OverviewPage() {
       value: stats.totalContent,
       sub: `${stats.editingContent} in editing`,
       icon: FileVideo,
+      iconBg: 'bg-pink-100 text-pink-600',
     },
     {
       label: 'Projects',
       value: stats.totalProjects,
       sub: `${stats.activeProjects} active`,
       icon: FolderKanban,
+      iconBg: 'bg-violet-100 text-violet-600',
     },
     ...(stats.totalUsers !== null
-      ? [{ label: 'Team Members', value: stats.totalUsers, sub: 'All users', icon: Users }]
+      ? [{ label: 'Team Members', value: stats.totalUsers, sub: 'All users', icon: Users, iconBg: 'bg-teal-100 text-teal-600' }]
       : []),
   ]
 
@@ -252,19 +255,19 @@ export default async function OverviewPage() {
             return (
               <div key={card.label} className="stat-card">
                 <div className="flex items-start justify-between mb-3">
-                  <div className="p-2 rounded-md bg-stone-50">
-                    <Icon size={15} className="text-stone-600" />
+                  <div className={`p-2.5 rounded-xl ${ (card as any).iconBg ?? 'bg-stone-100 text-stone-600'}`}>
+                    <Icon size={16} />
                   </div>
                   {(card as any).alert && (
-                    <div className="flex items-center gap-1 text-red-500">
-                      <AlertCircle size={12} />
-                      <span className="text-[10px] font-medium">{(card as any).alert}</span>
+                    <div className="flex items-center gap-1 text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
+                      <AlertCircle size={11} />
+                      <span className="text-[10px] font-semibold">{(card as any).alert}</span>
                     </div>
                   )}
                 </div>
                 <p className="text-2xl font-bold text-stone-900 tracking-tight">{card.value}</p>
-                <p className="text-xs text-stone-400 mt-0.5">{card.label}</p>
-                <p className="text-[11px] text-stone-500 mt-1">{card.sub}</p>
+                <p className="text-xs text-stone-500 mt-0.5 font-medium">{card.label}</p>
+                <p className="text-[11px] text-stone-400 mt-1">{card.sub}</p>
               </div>
             )
           })}
@@ -273,26 +276,32 @@ export default async function OverviewPage() {
         {/* Monthly money strip — admin only */}
         {isAdmin && (
           <div className="grid grid-cols-3 gap-3">
-            <div className="stat-card">
+            <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
-                <TrendingUp size={14} className="text-green-600" />
-                <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">Income this month</p>
+                <div className="p-1.5 rounded-lg bg-green-100">
+                  <TrendingUp size={13} className="text-green-600" />
+                </div>
+                <p className="text-[11px] uppercase tracking-wide text-green-700 font-semibold">Income this month</p>
               </div>
-              <p className="text-xl font-bold text-stone-900">{formatMoney(stats.monthlyIncome)}</p>
+              <p className="text-xl font-bold text-green-800">{formatMoney(stats.monthlyIncome)}</p>
             </div>
-            <div className="stat-card">
+            <div className="rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-rose-50 p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
-                <TrendingDown size={14} className="text-red-500" />
-                <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">Expense this month</p>
+                <div className="p-1.5 rounded-lg bg-red-100">
+                  <TrendingDown size={13} className="text-red-600" />
+                </div>
+                <p className="text-[11px] uppercase tracking-wide text-red-700 font-semibold">Expense this month</p>
               </div>
-              <p className="text-xl font-bold text-stone-900">{formatMoney(stats.monthlyExpense)}</p>
+              <p className="text-xl font-bold text-red-700">{formatMoney(stats.monthlyExpense)}</p>
             </div>
-            <div className="stat-card">
+            <div className={`rounded-xl border p-4 shadow-sm bg-gradient-to-br ${monthlyNet >= 0 ? 'from-violet-50 to-indigo-50 border-violet-200' : 'from-red-50 to-rose-50 border-red-200'}`}>
               <div className="flex items-center gap-2 mb-2">
-                <IndianRupee size={14} className={monthlyNet >= 0 ? 'text-green-600' : 'text-red-500'} />
-                <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">Net this month</p>
+                <div className={`p-1.5 rounded-lg ${monthlyNet >= 0 ? 'bg-violet-100' : 'bg-red-100'}`}>
+                  <IndianRupee size={13} className={monthlyNet >= 0 ? 'text-violet-600' : 'text-red-500'} />
+                </div>
+                <p className={`text-[11px] uppercase tracking-wide font-semibold ${monthlyNet >= 0 ? 'text-violet-700' : 'text-red-700'}`}>Net this month</p>
               </div>
-              <p className={`text-xl font-bold ${monthlyNet >= 0 ? 'text-stone-900' : 'text-red-600'}`}>
+              <p className={`text-xl font-bold ${monthlyNet >= 0 ? 'text-violet-800' : 'text-red-700'}`}>
                 {formatMoney(monthlyNet)}
               </p>
             </div>

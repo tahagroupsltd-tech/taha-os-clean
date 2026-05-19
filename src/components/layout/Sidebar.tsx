@@ -14,29 +14,35 @@ import { useUIStore } from '@/store/ui.store'
 import { useState } from 'react'
 
 const NAV_ITEMS = [
-  { href: '/overview', label: 'Overview', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'CLIENT'] },
-  { href: '/tasks', label: 'Tasks', icon: CheckSquare, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
-  { href: '/calendar', label: 'Calendar', icon: Calendar, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'CLIENT'] },
-  { href: '/content', label: 'Content', icon: FileVideo, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
-  { href: '/schedule', label: 'Bulk Schedule', icon: CalendarRange, roles: ['ADMIN', 'MANAGER'] },
-  { href: '/notes', label: 'Notes', icon: StickyNote, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
-  // Finance + Billing are FOUNDER ONLY
-  { href: '/finance', label: 'Finance', icon: Wallet, roles: ['ADMIN'] },
-  { href: '/billing', label: 'Client Billing', icon: IndianRupee, roles: ['ADMIN'] },
-  { href: '/projects', label: 'Projects', icon: FolderKanban, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'CLIENT'] },
-  { href: '/reports', label: 'Daily Reports', icon: ClipboardList, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
-  { href: '/team', label: 'Team', icon: Users, roles: ['ADMIN', 'MANAGER'] },
-  { href: '/sop', label: 'SOP Pipeline', icon: BookMarked, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
-  { href: '/ai-tools', label: 'AI Tools', icon: Sparkles, roles: ['ADMIN', 'MANAGER'] },
-  { href: '/settings', label: 'Settings', icon: Settings, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'CLIENT'] },
+  { href: '/overview',  label: 'Overview',      icon: LayoutDashboard, roles: ['ADMIN','MANAGER','EMPLOYEE','CLIENT'], color: 'text-violet-400' },
+  { href: '/tasks',     label: 'Tasks',          icon: CheckSquare,     roles: ['ADMIN','MANAGER','EMPLOYEE'],          color: 'text-blue-400'   },
+  { href: '/calendar',  label: 'Calendar',       icon: Calendar,        roles: ['ADMIN','MANAGER','EMPLOYEE','CLIENT'], color: 'text-cyan-400'   },
+  { href: '/content',   label: 'Content',        icon: FileVideo,       roles: ['ADMIN','MANAGER','EMPLOYEE'],          color: 'text-pink-400'   },
+  { href: '/schedule',  label: 'Bulk Schedule',  icon: CalendarRange,   roles: ['ADMIN','MANAGER'],                     color: 'text-orange-400' },
+  { href: '/notes',     label: 'Notes',          icon: StickyNote,      roles: ['ADMIN','MANAGER','EMPLOYEE'],          color: 'text-yellow-400' },
+  { href: '/finance',   label: 'Finance',        icon: Wallet,          roles: ['ADMIN'],                               color: 'text-green-400'  },
+  { href: '/billing',   label: 'Client Billing', icon: IndianRupee,     roles: ['ADMIN'],                               color: 'text-emerald-400'},
+  { href: '/projects',  label: 'Projects',       icon: FolderKanban,    roles: ['ADMIN','MANAGER','EMPLOYEE','CLIENT'], color: 'text-indigo-400' },
+  { href: '/reports',   label: 'Daily Reports',  icon: ClipboardList,   roles: ['ADMIN','MANAGER','EMPLOYEE'],          color: 'text-sky-400'    },
+  { href: '/team',      label: 'Team',           icon: Users,           roles: ['ADMIN','MANAGER'],                     color: 'text-teal-400'   },
+  { href: '/sop',       label: 'SOP Pipeline',   icon: BookMarked,      roles: ['ADMIN','MANAGER','EMPLOYEE'],          color: 'text-amber-400'  },
+  { href: '/ai-tools',  label: 'AI Tools',       icon: Sparkles,        roles: ['ADMIN','MANAGER'],                     color: 'text-purple-400' },
+  { href: '/settings',  label: 'Settings',       icon: Settings,        roles: ['ADMIN','MANAGER','EMPLOYEE','CLIENT'], color: 'text-slate-400'  },
 ]
 
 const CRM_ITEMS = [
-  { href: '/crm', label: 'Overview', icon: TrendingUp },
-  { href: '/crm/pipeline', label: 'Pipeline', icon: Target },
-  { href: '/crm/contacts', label: 'Contacts', icon: UserCircle },
-  { href: '/crm/deals', label: 'Deals', icon: IndianRupee },
+  { href: '/crm',          label: 'Overview',  icon: TrendingUp  },
+  { href: '/crm/pipeline', label: 'Pipeline',  icon: Target      },
+  { href: '/crm/contacts', label: 'Contacts',  icon: UserCircle  },
+  { href: '/crm/deals',    label: 'Deals',     icon: IndianRupee },
 ]
+
+const ROLE_COLORS: Record<string, string> = {
+  ADMIN:    'bg-violet-500/20 text-violet-300',
+  MANAGER:  'bg-blue-500/20 text-blue-300',
+  EMPLOYEE: 'bg-cyan-500/20 text-cyan-300',
+  CLIENT:   'bg-emerald-500/20 text-emerald-300',
+}
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -44,10 +50,8 @@ export function Sidebar() {
   const { sidebarOpen, setSidebarOpen } = useUIStore()
   const [crmOpen, setCrmOpen] = useState(pathname.startsWith('/crm'))
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => user && item.roles.includes(user.role)
-  )
-  const showCrm = user && ['ADMIN', 'MANAGER'].includes(user.role)
+  const visibleItems = NAV_ITEMS.filter(item => user && item.roles.includes(user.role))
+  const showCrm = user && ['ADMIN','MANAGER'].includes(user.role)
   const crmActive = pathname.startsWith('/crm')
 
   return (
@@ -55,7 +59,7 @@ export function Sidebar() {
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/20 z-20 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-20 lg:hidden backdrop-blur-sm"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -63,24 +67,25 @@ export function Sidebar() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed top-0 left-0 h-full w-56 bg-white border-r border-stone-100 z-30',
+          'fixed top-0 left-0 h-full w-56 z-30',
           'flex flex-col transition-transform duration-200',
+          'bg-[#0F0F14] border-r border-white/5',
           'lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between h-14 px-4 border-b border-stone-100">
+        <div className="flex items-center justify-between h-14 px-4 border-b border-white/5">
           <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-md bg-stone-900 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/30">
               <span className="text-white text-[10px] font-bold">TM</span>
             </div>
-            <span className="text-sm font-semibold text-stone-900 tracking-tight">
+            <span className="text-sm font-semibold text-white tracking-tight">
               Taha Media
             </span>
           </div>
           <button
-            className="lg:hidden text-stone-400 hover:text-stone-700"
+            className="lg:hidden text-white/40 hover:text-white/80"
             onClick={() => setSidebarOpen(false)}
           >
             <X size={16} />
@@ -88,7 +93,7 @@ export function Sidebar() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2 py-3 overflow-y-auto">
+        <nav className="flex-1 px-2 py-3 overflow-y-auto scrollbar-hidden">
           <div className="space-y-0.5">
             {visibleItems.map((item) => {
               const Icon = item.icon
@@ -99,41 +104,47 @@ export function Sidebar() {
                   href={item.href}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors',
+                    'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150',
                     active
-                      ? 'bg-stone-100 text-stone-900 font-medium'
-                      : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800'
+                      ? 'bg-white/10 text-white font-medium'
+                      : 'text-white/50 hover:bg-white/5 hover:text-white/80'
                   )}
                 >
-                  <Icon size={15} className={active ? 'text-stone-900' : 'text-stone-400'} />
+                  <Icon
+                    size={15}
+                    className={active ? item.color : 'text-white/30'}
+                  />
                   {item.label}
+                  {active && (
+                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-current opacity-60" />
+                  )}
                 </Link>
               )
             })}
 
             {/* CRM Section */}
             {showCrm && (
-              <div className="pt-2">
+              <div className="pt-1">
                 <button
                   onClick={() => setCrmOpen(o => !o)}
                   className={cn(
-                    'flex items-center justify-between w-full px-3 py-2 rounded-md text-sm transition-colors',
+                    'flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm transition-all',
                     crmActive
-                      ? 'bg-stone-100 text-stone-900 font-medium'
-                      : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800'
+                      ? 'bg-white/10 text-white font-medium'
+                      : 'text-white/50 hover:bg-white/5 hover:text-white/80'
                   )}
                 >
                   <div className="flex items-center gap-2.5">
-                    <TrendingUp size={15} className={crmActive ? 'text-stone-900' : 'text-stone-400'} />
+                    <TrendingUp size={15} className={crmActive ? 'text-rose-400' : 'text-white/30'} />
                     <span>CRM</span>
                   </div>
                   {crmOpen
-                    ? <ChevronDown size={12} className="text-stone-400" />
-                    : <ChevronRight size={12} className="text-stone-400" />
+                    ? <ChevronDown size={12} className="text-white/30" />
+                    : <ChevronRight size={12} className="text-white/30" />
                   }
                 </button>
                 {crmOpen && (
-                  <div className="ml-4 mt-0.5 space-y-0.5 border-l border-stone-100 pl-2">
+                  <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/10 pl-2">
                     {CRM_ITEMS.map(item => {
                       const Icon = item.icon
                       const active = pathname === item.href || (item.href !== '/crm' && pathname.startsWith(item.href))
@@ -143,13 +154,13 @@ export function Sidebar() {
                           href={item.href}
                           onClick={() => setSidebarOpen(false)}
                           className={cn(
-                            'flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors',
+                            'flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-all',
                             active
-                              ? 'bg-stone-100 text-stone-900 font-medium'
-                              : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800'
+                              ? 'bg-white/10 text-white font-medium'
+                              : 'text-white/40 hover:bg-white/5 hover:text-white/70'
                           )}
                         >
-                          <Icon size={13} className={active ? 'text-stone-900' : 'text-stone-400'} />
+                          <Icon size={13} className={active ? 'text-rose-400' : 'text-white/25'} />
                           {item.label}
                         </Link>
                       )
@@ -162,21 +173,26 @@ export function Sidebar() {
         </nav>
 
         {/* User footer */}
-        <div className="p-3 border-t border-stone-100">
-          <div className="flex items-center gap-2.5 mb-2 px-3 py-2">
-            <div className="w-7 h-7 rounded-full bg-stone-200 flex items-center justify-center flex-shrink-0">
-              <span className="text-[11px] font-bold text-stone-600">
+        <div className="p-3 border-t border-white/5">
+          <div className="flex items-center gap-2.5 mb-2 px-3 py-2 rounded-lg bg-white/5">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center flex-shrink-0">
+              <span className="text-[11px] font-bold text-white">
                 {user?.name?.[0]?.toUpperCase() ?? '?'}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-stone-900 truncate">{user?.name}</p>
-              <p className="text-[10px] text-stone-400 capitalize">{user?.role?.toLowerCase()}</p>
+              <p className="text-xs font-medium text-white/90 truncate">{user?.name}</p>
+              <span className={cn(
+                'text-[9px] font-semibold px-1.5 py-0.5 rounded-sm uppercase tracking-wider',
+                ROLE_COLORS[user?.role ?? ''] ?? 'bg-white/10 text-white/50'
+              )}>
+                {user?.role?.toLowerCase()}
+              </span>
             </div>
           </div>
           <button
             onClick={logout}
-            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-sm text-stone-400 hover:bg-stone-50 hover:text-stone-700 transition-colors"
+            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-white/30 hover:bg-white/5 hover:text-white/60 transition-colors"
           >
             <LogOut size={14} />
             Sign out
