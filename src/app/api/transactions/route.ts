@@ -1,5 +1,6 @@
 // src/app/api/transactions/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getUserFromRequest } from '@/lib/auth'
 import { canViewFinance, canEditFinance } from '@/lib/permissions'
 import { sbSelect, sbInsert, sbFindOne, TRANSACTION_SELECT, nowTs } from '@/lib/supa'
@@ -84,6 +85,10 @@ export async function POST(req: NextRequest) {
     select: TRANSACTION_SELECT,
     filters: { id: `eq.${t.id}` },
   }) ?? t
+
+  // Bust server-component caches so Overview + Billing update on next load
+  revalidatePath('/overview')
+  revalidatePath('/billing')
 
   return NextResponse.json({ data: full }, { status: 201 })
 }

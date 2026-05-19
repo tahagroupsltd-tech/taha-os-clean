@@ -13,7 +13,7 @@ import {
   formatMoney, formatDate, cn,
 } from '@/lib/utils'
 import type { Transaction, TransactionType, TransactionCategory } from '@/types'
-import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const TYPE_OPTIONS = Object.entries(TRANSACTION_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))
@@ -41,12 +41,22 @@ const EMPTY: TxForm = {
   projectId: '',
 }
 
+interface FinanceSummary {
+  income: number; expense: number; net: number
+}
+const ZERO: FinanceSummary = { income: 0, expense: 0, net: 0 }
+
 export default function FinancePage() {
   const router = useRouter()
   const user = useAuthStore((s) => s.user)
   const isFounder = user?.role === 'ADMIN'
   const [items, setItems] = useState<Transaction[]>([])
   const [summary, setSummary] = useState({ income: 0, expense: 0, net: 0 })
+  const [liveSummary, setLiveSummary] = useState<{
+    allTime: FinanceSummary; thisMonth: FinanceSummary; thisYear: FinanceSummary; txCount: number
+  } | null>(null)
+  const [lastSynced, setLastSynced] = useState<Date | null>(null)
+  const [syncing, setSyncing] = useState(false)
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState<string>('')
@@ -83,7 +93,22 @@ export default function FinancePage() {
     setLoading(false)
   }, [filterType])
 
+  const fetchLiveSummary = useCallback(async () => {
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/transactions/summary')
+      const json = await res.json()
+      if (res.ok) {
+        setLiveSummary(json)
+        setLastSynced(new Date())
+      }
+    } finally {
+      setSyncing(false)
+    }
+  }, [])
+
   useEffect(() => { fetchTransactions() }, [fetchTransactions])
+  useEffect(() => { if (isFounder) fetchLiveSummary() }, [isFounder, fetchLiveSummary])
 
   useEffect(() => {
     if (user?.role !== 'CLIENT') {
@@ -142,7 +167,8 @@ export default function FinancePage() {
       toast.success(editing ? 'Updated' : 'Saved')
       setModalOpen(false)
       fetchTransactions()
-      router.refresh() // bust the Overview server-component cache
+      fetchLiveSummary()
+      router.refresh()
     } catch (err: any) {
       toast.error(err.message)
     } finally {
@@ -156,7 +182,8 @@ export default function FinancePage() {
     if (res.ok) {
       toast.success('Deleted')
       fetchTransactions()
-      router.refresh() // bust the Overview server-component cache
+      fetchLiveSummary()
+      router.refresh()
     } else {
       toast.error('Only admins can delete transactions')
     }
@@ -182,9 +209,47 @@ export default function FinancePage() {
       />
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
-        {/* Summary cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <SummaryCard
+        {/* Live sync strip */}
+        {liveSummary && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 p-4 shadow-sm">
+              <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wider mb-1">This month — Income</p>
+              <p className="text-xl font-bold text-green-800">{formatMoney(liveSummary.thisMonth.income)}</p>
+            </div>
+            <div className="rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-rose-50 p-4 shadow-sm">
+              <p className="text-[10px] font-semibold text-red-700 uppercase tracking-wider mb-1">This month — Expense</p>
+              <p className="text-xl font-bold text-red-700">{formatMoney(liveSummary.thisMonth.expense)}</p>
+            </div>
+            <div className={`rounded-xl border p-4 shadow-sm bg-gradient-to-br ${
+              liveSummary.thisMonth.net >= 0 ? 'from-violet-50 to-indigo-50 border-violet-200' : 'from-red-50 to-rose-50 border-red-200'
+            }`}>
+              <p className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${
+                liveSummary.thisMonth.net >= 0 ? 'text-violet-700' : 'text-red-700'
+              }`}>This month — Net</p>
+              <p className={`text-xl font-bold ${
+                liveSummary.thisMonth.net >= 0 ? 'text-violet-800' : 'text-red-700'
+              }`}>{formatMoney(liveSummary.thisMonth.net)}</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+              <p className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1">All time — Net</p>
+              <p className="text-xl font-bold text-stone-900">{formatMoney(liveSummary.allTime.net)}</p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-[10px] text-stone-400">{liveSummary.txCount} transactions</p>
+                <button
+                  onClick={fetchLiveSummary}
+                  disabled={syncing}
+                  className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 transition-colors"
+                >
+                  <RefreshCw size={10} className={syncing ? 'animate-spin' : ''} />
+                  {lastSynced ? `${lastSynced.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Sync'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Summary cards (filter-aware) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">          <SummaryCard
             label="Total Income"
             value={summary.income}
             icon={<TrendingUp size={16} />}

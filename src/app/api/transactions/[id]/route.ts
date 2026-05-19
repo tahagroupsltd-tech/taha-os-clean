@@ -1,5 +1,6 @@
 // src/app/api/transactions/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getUserFromRequest } from '@/lib/auth'
 import { canEditFinance } from '@/lib/permissions'
 import { sbFindOne, sbUpdate, sbDelete, TRANSACTION_SELECT } from '@/lib/supa'
@@ -39,6 +40,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     filters: { id: `eq.${params.id}` },
   })
 
+  revalidatePath('/overview')
+  revalidatePath('/billing')
+
   return NextResponse.json({ data: updated })
 }
 
@@ -48,5 +52,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!canEditFinance(user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   await sbDelete('transactions', { id: `eq.${params.id}` })
+  revalidatePath('/overview')
+  revalidatePath('/billing')
   return NextResponse.json({ message: 'Deleted' })
 }
