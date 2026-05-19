@@ -4,13 +4,14 @@ import type { NextRequest } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
 
 // Routes that don't require auth
-const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/webhook']
+const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/webhook', '/api/debug']
 
 // Role-based page access (settings is open to all so anyone can change their own password)
 const ROLE_ACCESS: Record<string, string[]> = {
   '/team': ['ADMIN', 'EMPLOYEE'],
   '/reports': ['ADMIN', 'EMPLOYEE'],
   '/billing': ['ADMIN'],
+  '/crm': ['ADMIN', 'MANAGER'],
 }
 
 export async function middleware(request: NextRequest) {

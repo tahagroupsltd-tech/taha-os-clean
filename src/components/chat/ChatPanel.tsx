@@ -21,8 +21,8 @@ const HISTORY_CAP = 30
 const SUGGESTIONS = [
   'Add a calendar event for AXS shoot from May 1 to May 30, assign to editor1',
   'Create task: edit the AXS reel, urgent, due Friday, assign to editor1',
-  'Who is overdue on tasks this week?',
-  'Create content: Eid teaser reel for Aruvi, assign to editor1, post May 5',
+  'Add a CRM lead called "Karthick project", stage Qualified, assign to me',
+  'Create a CRM contact: Karthick, phone 9876543210, company AXS Media',
 ]
 
 export function ChatPanel({ open, onClose }: Props) {
@@ -132,7 +132,7 @@ export function ChatPanel({ open, onClose }: Props) {
             </div>
             <div>
               <p className="text-sm font-semibold text-stone-900 leading-tight">AI Assistant</p>
-              <p className="text-[10px] text-stone-400 leading-tight">Tasks · Events · Projects · Content</p>
+              <p className="text-[10px] text-stone-400 leading-tight">Tasks · Events · Projects · Content · CRM</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -165,7 +165,7 @@ export function ChatPanel({ open, onClose }: Props) {
                   <Bot size={11} className="text-white" />
                 </div>
                 <p className="text-xs text-stone-600 leading-relaxed bg-stone-50 rounded-xl rounded-tl-sm px-3 py-2.5">
-                  Hi! I can create tasks, calendar events, content, projects and users — just tell me what you need. Try one of these:
+                  Hi! I can create tasks, events, content, projects, users, and CRM records (leads, contacts, companies, deals) — just tell me what you need. Try one of these:
                 </p>
               </div>
               {/* Suggestion chips */}

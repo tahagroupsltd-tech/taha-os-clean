@@ -1,10 +1,11 @@
 // src/app/api/auth/register/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
-import { db } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
-import { Role } from '@prisma/client'
 import { canCreateUsers, canAssignRole } from '@/lib/permissions'
+import { sbSelect, sbInsert, nowTs } from '@/lib/supa'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,13 +15,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { username, name, phone, password, role } = body as {
-      username: string
-      name: string
-      phone?: string
-      password: string
-      role: Role
-    }
+    const { username, name, phone, password, role } = body
 
     if (!username || !name || !password || !role) {
       return NextResponse.json(
@@ -29,52 +24,50 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Managers cannot create ADMIN accounts
     if (!canAssignRole(requestingUser.role, role)) {
-      return NextResponse.json(
-        { error: 'You are not allowed to assign that role' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'You are not allowed to assign that role' }, { status: 403 })
     }
 
-    const existing = await db.user.findFirst({
-      where: {
-        OR: [
-          { username: username.toLowerCase().trim() },
-          ...(phone ? [{ phone: phone.trim() }] : []),
-        ],
-      },
+    // Check uniqueness
+    const existing = await sbSelect('users', {
+      select: 'id,username,phone',
+      filters: {},
     })
+    const cleanUsername = username.toLowerCase().trim()
+    const cleanPhone = phone?.trim() || null
 
-    if (existing) {
-      return NextResponse.json(
-        { error: 'Username or phone already in use' },
-        { status: 409 }
-      )
+    const conflict = existing.find((u: any) =>
+      u.username === cleanUsername || (cleanPhone && u.phone === cleanPhone)
+    )
+    if (conflict) {
+      return NextResponse.json({ error: 'Username or phone already in use' }, { status: 409 })
     }
 
     const hashed = await bcrypt.hash(password, 10)
+    const now = nowTs()
 
-    const user = await db.user.create({
-      data: {
-        username: username.toLowerCase().trim(),
-        name: name.trim(),
-        phone: phone?.trim() || null,
-        password: hashed,
-        role,
-      },
-      select: {
-        id: true,
-        username: true,
-        name: true,
-        role: true,
-        phone: true,
-        isActive: true,
-        createdAt: true,
-      },
+    const user = await sbInsert('users', {
+      username: cleanUsername,
+      name: name.trim(),
+      phone: cleanPhone,
+      password: hashed,
+      role,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
     })
 
-    return NextResponse.json({ data: user }, { status: 201 })
+    return NextResponse.json({
+      data: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+        phone: user.phone,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+      },
+    }, { status: 201 })
   } catch (err) {
     console.error('[REGISTER]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

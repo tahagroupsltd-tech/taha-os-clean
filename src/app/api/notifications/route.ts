@@ -1,10 +1,10 @@
 // src/app/api/notifications/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
+import { sbSelect, sbCount, sbDelete } from '@/lib/supa'
 
-// GET /api/notifications  → returns recent notifications for the logged-in user.
-// Query: ?unreadOnly=true | ?limit=N
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -13,29 +13,25 @@ export async function GET(req: NextRequest) {
   const unreadOnly = searchParams.get('unreadOnly') === 'true'
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '20', 10) || 20, 100)
 
-  const where: any = { userId: user.id }
-  if (unreadOnly) where.read = false
+  const filters: Record<string, string> = { userId: `eq.${user.id}` }
+  if (unreadOnly) filters.read = 'eq.false'
 
   const [items, unreadCount] = await Promise.all([
-    db.notification.findMany({
-      where,
-      orderBy: [{ read: 'asc' }, { createdAt: 'desc' }],
-      take: limit,
+    sbSelect('notifications', {
+      filters,
+      order: 'read.asc,createdAt.desc',
+      limit,
     }),
-    db.notification.count({ where: { userId: user.id, read: false } }),
+    sbCount('notifications', { userId: `eq.${user.id}`, read: 'eq.false' }),
   ])
 
   return NextResponse.json({ data: items, unreadCount })
 }
 
-// DELETE /api/notifications  → clear all read notifications for the user
 export async function DELETE(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const result = await db.notification.deleteMany({
-    where: { userId: user.id, read: true },
-  })
-
-  return NextResponse.json({ ok: true, deleted: result.count })
+  await sbDelete('notifications', { userId: `eq.${user.id}`, read: 'eq.true' })
+  return NextResponse.json({ ok: true })
 }

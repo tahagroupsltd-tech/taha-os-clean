@@ -243,7 +243,6 @@ export function TeamClient({ initialUsers, currentUserId, currentUserRole }: Pro
               <tr className="border-b border-stone-50">
                 <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide">Name</th>
                 <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide">Username</th>
-                <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide">Phone</th>
                 <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide">Role</th>
                 <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide">Status</th>
                 <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide">Joined</th>
@@ -273,7 +272,6 @@ export function TeamClient({ initialUsers, currentUserId, currentUserRole }: Pro
                       </div>
                     </td>
                     <td className="px-4 py-3 text-stone-500 font-mono">{user.username}</td>
-                    <td className="px-4 py-3 text-stone-500">{user.phone ?? '—'}</td>
                     <td className="px-4 py-3">
                       <Badge className={ROLE_BADGE[user.role as Role]}>
                         {ROLE_LABEL[user.role as Role]}

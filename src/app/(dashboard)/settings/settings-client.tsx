@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { KeyRound, Shield, CalendarDays, CheckCircle2, AlertCircle, RefreshCw, Unlink, Bell, BellOff } from 'lucide-react'
+import { KeyRound, Shield, CalendarDays, CheckCircle2, AlertCircle, RefreshCw, Unlink, Bell, BellOff, Eye, EyeOff, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface SimpleUser {
@@ -29,6 +29,10 @@ export function SettingsClient({ currentUserId, canResetOthers, users, gcalConne
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
   const [savingSelf, setSavingSelf] = useState(false)
+  const [showNewPw, setShowNewPw] = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
+  // ── Admin reset show/hide ──────────────────────────────────
+  const [showResetPw, setShowResetPw] = useState(false)
 
   const handleChangeOwn = async () => {
     if (newPw.length < 6) return toast.error('New password must be at least 6 characters')
@@ -94,15 +98,18 @@ export function SettingsClient({ currentUserId, canResetOthers, users, gcalConne
       // Clean URL
       window.history.replaceState({}, '', '/settings')
     } else if (gcalError) {
+      const raw = decodeURIComponent(gcalError).replace(/_/g, ' ')
       const msg =
         gcalError === 'access_denied'
           ? 'Access denied — please grant Calendar permission.'
           : gcalError === 'needs_revoke'
-          ? 'Please go to myaccount.google.com/permissions → remove "taha-os-clean", then try connecting again.'
-          : gcalError === 'token_exchange_failed'
-          ? 'Could not exchange token — try again.'
-          : `Connection failed: ${gcalError}`
-      toast.error(msg, { duration: 8000 })
+          ? 'Please go to myaccount.google.com/permissions → remove this app, then try connecting again.'
+          : raw.includes('redirect uri mismatch') || raw.includes('redirect_uri_mismatch')
+          ? 'Google OAuth error: redirect_uri_mismatch. Ensure https://taha-os-clean.vercel.app/api/auth/google-calendar/callback is in Google Cloud Console → Credentials → Authorised redirect URIs.'
+          : raw.includes('invalid grant') || raw.includes('invalid_grant')
+          ? 'Auth code expired — please click Connect again to get a fresh code.'
+          : `Calendar connection failed: ${raw}`
+      toast.error(msg, { duration: 15000 })
       window.history.replaceState({}, '', '/settings')
     }
   }, [searchParams])
@@ -196,20 +203,38 @@ export function SettingsClient({ currentUserId, canResetOthers, users, gcalConne
             placeholder="Your current password"
           />
           <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="New password"
-              type="password"
-              value={newPw}
-              onChange={(e) => setNewPw(e.target.value)}
-              placeholder="Min 6 characters"
-            />
-            <Input
-              label="Confirm new password"
-              type="password"
-              value={confirmPw}
-              onChange={(e) => setConfirmPw(e.target.value)}
-              placeholder="Re-type"
-            />
+            <div className="relative">
+              <Input
+                label="New password"
+                type={showNewPw ? 'text' : 'password'}
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                placeholder="Min 6 characters"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPw(v => !v)}
+                className="absolute right-2.5 bottom-2 text-stone-400 hover:text-stone-700"
+              >
+                {showNewPw ? <EyeOff size={13} /> : <Eye size={13} />}
+              </button>
+            </div>
+            <div className="relative">
+              <Input
+                label="Confirm new password"
+                type={showConfirmPw ? 'text' : 'password'}
+                value={confirmPw}
+                onChange={(e) => setConfirmPw(e.target.value)}
+                placeholder="Re-type"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPw(v => !v)}
+                className="absolute right-2.5 bottom-2 text-stone-400 hover:text-stone-700"
+              >
+                {showConfirmPw ? <EyeOff size={13} /> : <Eye size={13} />}
+              </button>
+            </div>
           </div>
           <Button size="sm" loading={savingSelf} onClick={handleChangeOwn}>
             Update password
@@ -228,8 +253,7 @@ export function SettingsClient({ currentUserId, canResetOthers, users, gcalConne
           </div>
           <div className="rounded-md bg-amber-50 border border-amber-100 px-3 py-2.5 mb-3 max-w-md">
             <p className="text-[11px] text-amber-700 leading-relaxed">
-              Use this to reset a teammate or client's password. They'll log in with the new
-              password — you should share it with them securely.
+              Use this to reset a teammate or client's password. After resetting, copy the password and share it via a <strong>private message, Signal, or WhatsApp</strong> — never over email or Slack.
             </p>
           </div>
           <div className="space-y-3 max-w-md">
@@ -243,13 +267,34 @@ export function SettingsClient({ currentUserId, canResetOthers, users, gcalConne
               value={targetUserId}
               onChange={(e) => setTargetUserId(e.target.value)}
             />
-            <Input
-              label="New password"
-              type="text"
-              value={resetPw}
-              onChange={(e) => setResetPw(e.target.value)}
-              placeholder="Set a new password (visible so you can share it)"
-            />
+            <div className="relative">
+              <Input
+                label="New password"
+                type={showResetPw ? 'text' : 'password'}
+                value={resetPw}
+                onChange={(e) => setResetPw(e.target.value)}
+                placeholder="Set a new password"
+              />
+              <div className="absolute right-2.5 bottom-2 flex items-center gap-1">
+                {resetPw && (
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(resetPw); toast.success('Copied') }}
+                    className="text-stone-400 hover:text-stone-700"
+                    title="Copy password"
+                  >
+                    <Copy size={13} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowResetPw(v => !v)}
+                  className="text-stone-400 hover:text-stone-700"
+                >
+                  {showResetPw ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+              </div>
+            </div>
             <Button size="sm" loading={savingReset} onClick={handleAdminReset}>
               Reset password
             </Button>

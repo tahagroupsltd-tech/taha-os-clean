@@ -1,18 +1,18 @@
 // src/app/api/reports/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
+import { sbSelect, sbFindOne, sbInsert, sbUpdate, nowTs } from '@/lib/supa'
 
-// Truncate to start-of-day in UTC
+export const dynamic = 'force-dynamic'
+
 function dayOf(d: Date) {
   const out = new Date(d)
   out.setUTCHours(0, 0, 0, 0)
   return out
 }
 
-// GET /api/reports?date=YYYY-MM-DD&userId=...
-//  - Admin: can see all reports, optionally filter by userId or date
-//  - Employee/Client: only their own reports
+const REPORT_SELECT = '*,owner:users!ownerId(id,name,username,role)'
+
 export async function GET(req: NextRequest) {
   const me = await getUserFromRequest(req)
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -22,25 +22,29 @@ export async function GET(req: NextRequest) {
   const userIdQ = searchParams.get('userId')
   const wantStatus = searchParams.get('status') === 'today'
 
-  const isAdmin = me.role === 'ADMIN'
-  const canSeeAllReports = isAdmin || me.role === 'MANAGER'
+  const canSeeAllReports = me.role === 'ADMIN' || me.role === 'MANAGER'
 
-  // Special "today's submission status" view (admin + manager)
+  // Special "today's submission status" view
   if (wantStatus && canSeeAllReports) {
-    const today = dayOf(new Date())
-    // sequential to avoid Supabase pooler prepared-statement collisions
-    const users = await db.user.findMany({
-      where: { isActive: true, role: { in: ['ADMIN', 'MANAGER', 'EMPLOYEE'] } },
-      select: { id: true, name: true, username: true, role: true },
-      orderBy: { name: 'asc' },
-    })
-    const reportsToday = await db.dailyReport.findMany({
-      where: { date: today },
-      select: { ownerId: true, summary: true, hoursWorked: true, createdAt: true },
-    })
-    const submitted = new Map(reportsToday.map((r) => [r.ownerId, r]))
+    const today = dayOf(new Date()).toISOString()
+
+    const [users, reportsToday] = await Promise.all([
+      sbSelect('users', {
+        select: 'id,name,username,role',
+        filters: { isActive: 'eq.true' },
+        order: 'name.asc',
+      }),
+      sbSelect('daily_reports', {
+        select: 'ownerId,summary,hoursWorked,createdAt',
+        filters: { date: `eq.${today}` },
+      }),
+    ])
+
+    const staffUsers = users.filter((u: any) => ['ADMIN', 'MANAGER', 'EMPLOYEE'].includes(u.role))
+    const submitted = new Map(reportsToday.map((r: any) => [r.ownerId, r]))
+
     return NextResponse.json({
-      data: users.map((u) => ({
+      data: staffUsers.map((u: any) => ({
         ...u,
         submitted: submitted.has(u.id),
         report: submitted.get(u.id) ?? null,
@@ -48,26 +52,20 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const where: any = {}
-  if (!canSeeAllReports) where.ownerId = me.id
-  else if (userIdQ) where.ownerId = userIdQ
-  if (dateStr) where.date = new Date(dateStr + 'T00:00:00Z')
+  const filters: Record<string, string> = {}
+  if (!canSeeAllReports) filters.ownerId = `eq.${me.id}`
+  else if (userIdQ) filters.ownerId = `eq.${userIdQ}`
+  if (dateStr) filters.date = `eq.${new Date(dateStr + 'T00:00:00Z').toISOString()}`
 
-  const reports = await db.dailyReport.findMany({
-    where,
-    include: {
-      owner: { select: { id: true, name: true, username: true, role: true } },
-    },
-    orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-    take: 100,
+  const reports = await sbSelect('daily_reports', {
+    select: REPORT_SELECT,
+    filters,
+    order: 'date.desc,createdAt.desc',
   })
 
-  return NextResponse.json({ data: reports })
+  return NextResponse.json({ data: reports.slice(0, 100) })
 }
 
-// POST /api/reports
-//  Submit today's report for the logged-in user. If a report for today
-//  exists, update it (upsert).
 export async function POST(req: NextRequest) {
   const me = await getUserFromRequest(req)
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -79,23 +77,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Summary is required' }, { status: 400 })
   }
 
-  const target = date ? dayOf(new Date(date)) : dayOf(new Date())
+  const target = dayOf(date ? new Date(date) : new Date()).toISOString()
 
-  const report = await db.dailyReport.upsert({
-    where: { ownerId_date: { ownerId: me.id, date: target } },
-    update: {
-      summary: summary.trim(),
-      hoursWorked: typeof hoursWorked === 'number' ? hoursWorked : null,
-      blockers: blockers?.trim() || null,
-    },
-    create: {
+  // Upsert: check if report exists for this user+date
+  const existing = await sbFindOne('daily_reports', {
+    filters: { ownerId: `eq.${me.id}`, date: `eq.${target}` },
+  })
+
+  const now = nowTs()
+  const reportData = {
+    summary: summary.trim(),
+    hoursWorked: typeof hoursWorked === 'number' ? hoursWorked : null,
+    blockers: blockers?.trim() || null,
+    updatedAt: now,
+  }
+
+  let report: any
+  if (existing) {
+    await sbUpdate('daily_reports', { id: `eq.${existing.id}` }, reportData)
+    report = await sbFindOne('daily_reports', { filters: { id: `eq.${existing.id}` } })
+  } else {
+    report = await sbInsert('daily_reports', {
       ownerId: me.id,
       date: target,
-      summary: summary.trim(),
-      hoursWorked: typeof hoursWorked === 'number' ? hoursWorked : null,
-      blockers: blockers?.trim() || null,
-    },
-  })
+      ...reportData,
+      createdAt: now,
+    })
+  }
 
   return NextResponse.json({ data: report })
 }

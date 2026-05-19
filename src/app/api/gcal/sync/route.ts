@@ -1,96 +1,108 @@
 // src/app/api/gcal/sync/route.ts
-// POST: Sync all pending tasks and content to the current user's Google Calendar.
-// Safe to call multiple times — uses upsert so existing events are updated, not duplicated.
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { sbSelect, sbRpc } from '@/lib/supa'
 import { syncContentEvents, syncTaskEvent } from '@/lib/gcal'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // Verify the user has a connected calendar
-  const token = await db.googleCalendarToken.findUnique({ where: { userId: user.id } })
-  if (!token) {
+  // gcal_get_token returns an array; empty array = not connected
+  const tokenRows = await sbRpc('gcal_get_token', { p_user_id: user.id }).catch(() => [])
+  const hasToken = Array.isArray(tokenRows) ? tokenRows.length > 0 : !!tokenRows
+  if (!hasToken) {
     return NextResponse.json({ error: 'Google Calendar not connected' }, { status: 400 })
   }
 
-  const now = new Date()
+  const now = new Date().toISOString()
   let synced = 0
+  const errors: string[] = []
 
-  // ── Tasks assigned to this user that are not done and have a future deadline ──
-  const tasks = await db.task.findMany({
-    where: {
-      assignedToId: user.id,
-      status: { not: 'DONE' },
-      deadline: { gte: now },
+  // Tasks assigned to this user that are not done and have a future deadline
+  const tasks = await sbSelect('tasks', {
+    select: '*,project:projects!projectId(name)',
+    filters: {
+      assignedToId: `eq.${user.id}`,
+      status: `neq.DONE`,
+      deadline: `gte.${now}`,
     },
-    include: { project: { select: { name: true } } },
   })
 
-  await Promise.allSettled(
-    tasks.map(async (t) => {
+  for (const t of tasks) {
+    try {
       await syncTaskEvent(t.id, {
         title: t.title,
-        deadline: t.deadline,
+        deadline: new Date(t.deadline),
         assigneeId: t.assignedToId,
         projectName: t.project?.name,
       })
       synced++
-    })
-  )
+    } catch (e: any) {
+      errors.push(`Task "${t.title}": ${e?.message}`)
+    }
+  }
 
-  // ── Content assigned to this user (editor) — upcoming post dates ──
-  const assignedContent = await db.content.findMany({
-    where: {
-      assigneeId: user.id,
-      status: { not: 'POSTED' },
-      postDate: { gte: now },
+  // Content assigned to this user — upcoming post dates
+  const assignedContent = await sbSelect('content', {
+    select: '*,project:projects!projectId(name)',
+    filters: {
+      assigneeId: `eq.${user.id}`,
+      status: `neq.POSTED`,
+      postDate: `gte.${now}`,
     },
-    include: { project: { select: { name: true } } },
   })
 
-  await Promise.allSettled(
-    assignedContent.map(async (c) => {
+  for (const c of assignedContent) {
+    try {
       await syncContentEvents(c.id, {
         title: c.title,
-        postDate: c.postDate,
+        postDate: new Date(c.postDate),
         assigneeId: c.assigneeId,
         createdById: c.createdById,
         projectName: c.project?.name,
       })
       synced++
-    })
-  )
+    } catch (e: any) {
+      errors.push(`Content "${c.title}": ${e?.message}`)
+    }
+  }
 
-  // ── Content created by this user (manager) — upcoming post dates ──
-  const createdContent = await db.content.findMany({
-    where: {
-      createdById: user.id,
-      status: { not: 'POSTED' },
-      postDate: { gte: now },
-      // Avoid double-counting items already handled above
-      assigneeId: { not: user.id },
+  // Content created by this user (manager) — avoid double-counting
+  const createdContent = await sbSelect('content', {
+    select: '*,project:projects!projectId(name)',
+    filters: {
+      createdById: `eq.${user.id}`,
+      status: `neq.POSTED`,
+      postDate: `gte.${now}`,
+      assigneeId: `neq.${user.id}`,
     },
-    include: { project: { select: { name: true } } },
   })
 
-  await Promise.allSettled(
-    createdContent.map(async (c) => {
+  for (const c of createdContent) {
+    try {
       await syncContentEvents(c.id, {
         title: c.title,
-        postDate: c.postDate,
+        postDate: new Date(c.postDate),
         assigneeId: c.assigneeId,
         createdById: c.createdById,
         projectName: c.project?.name,
       })
       synced++
-    })
-  )
+    } catch (e: any) {
+      errors.push(`Content "${c.title}": ${e?.message}`)
+    }
+  }
 
-  return NextResponse.json({
-    message: `Synced ${synced} item${synced === 1 ? '' : 's'} to Google Calendar`,
-    synced,
-  })
+  return NextResponse.json(
+    {
+      message: `Synced ${synced} item${synced === 1 ? '' : 's'} to Google Calendar`,
+      synced,
+      ...(errors.length > 0 ? { warnings: errors } : {}),
+    },
+    { headers: { 'Cache-Control': 'no-store' } }
+  )
 }

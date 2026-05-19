@@ -1,6 +1,7 @@
 'use client'
 // src/app/(dashboard)/finance/page.tsx
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -41,6 +42,7 @@ const EMPTY: TxForm = {
 }
 
 export default function FinancePage() {
+  const router = useRouter()
   const user = useAuthStore((s) => s.user)
   const isFounder = user?.role === 'ADMIN'
   const [items, setItems] = useState<Transaction[]>([])
@@ -140,6 +142,7 @@ export default function FinancePage() {
       toast.success(editing ? 'Updated' : 'Saved')
       setModalOpen(false)
       fetchTransactions()
+      router.refresh() // bust the Overview server-component cache
     } catch (err: any) {
       toast.error(err.message)
     } finally {
@@ -153,6 +156,7 @@ export default function FinancePage() {
     if (res.ok) {
       toast.success('Deleted')
       fetchTransactions()
+      router.refresh() // bust the Overview server-component cache
     } else {
       toast.error('Only admins can delete transactions')
     }

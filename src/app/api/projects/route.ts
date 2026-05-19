@@ -1,28 +1,37 @@
 // src/app/api/projects/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
-import { ProjectStatus } from '@prisma/client'
 import { notify } from '@/lib/notify'
 import { canManageProjects } from '@/lib/permissions'
+import { sbSelect, sbInsert, sbFindOne, sbCount, PROJECT_SELECT, normalizeProject, nowTs } from '@/lib/supa'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const where: any = {}
-  if (user.role === 'CLIENT') where.clientId = user.id
+  const filters: Record<string, string> = {}
+  if (user.role === 'CLIENT') filters.clientId = `eq.${user.id}`
 
-  const projects = await db.project.findMany({
-    where,
-    include: {
-      client: { select: { id: true, name: true } },
-      _count: { select: { tasks: true, content: true } },
-    },
-    orderBy: { createdAt: 'desc' },
+  const projects = await sbSelect('projects', {
+    select: PROJECT_SELECT,
+    filters,
+    order: 'createdAt.desc',
   })
 
-  return NextResponse.json({ data: projects })
+  // Attach task/content counts in parallel
+  const withCounts = await Promise.all(
+    projects.map(async (p: any) => {
+      const [taskCount, contentCount] = await Promise.all([
+        sbCount('tasks', { projectId: `eq.${p.id}` }),
+        sbCount('content', { projectId: `eq.${p.id}` }),
+      ])
+      return { ...normalizeProject(p), _count: { tasks: taskCount, content: contentCount } }
+    })
+  )
+
+  return NextResponse.json({ data: withCounts })
 }
 
 export async function POST(req: NextRequest) {
@@ -35,32 +44,39 @@ export async function POST(req: NextRequest) {
 
   if (!name) return NextResponse.json({ error: 'Name is required' }, { status: 400 })
 
-  const project = await db.project.create({
-    data: {
-      name,
-      description,
-      status: (status as ProjectStatus) ?? 'ACTIVE',
-      clientId: clientId || null,
-      startDate: startDate ? new Date(startDate) : null,
-      dueDate: dueDate ? new Date(dueDate) : null,
-      driveFolder: driveFolder || null,
-    },
-    include: {
-      client: { select: { id: true, name: true } },
-      _count: { select: { tasks: true, content: true } },
-    },
+  const { boardColumn } = body
+  const now = nowTs()
+  const project = await sbInsert('projects', {
+    name,
+    description: description || null,
+    status: status ?? 'ACTIVE',
+    board_column: boardColumn ?? 'ACTIVE',
+    sopLevel: body.sopLevel ?? null,
+    value: body.value ?? null,
+    clientId: clientId || null,
+    startDate: startDate ? new Date(startDate).toISOString() : null,
+    dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+    driveFolder: driveFolder || null,
+    createdAt: now,
+    updatedAt: now,
   })
 
-  // ── Notify the client when a project is created for them ──
-  if (project.clientId && project.clientId !== user.id) {
+  const full = await sbFindOne('projects', {
+    select: PROJECT_SELECT,
+    filters: { id: `eq.${project.id}` },
+  }) ?? { ...project, client: null }
+
+  const normalized = normalizeProject(full)
+
+  if (normalized.clientId && normalized.clientId !== user.id) {
     await notify({
-      userId: project.clientId,
+      userId: normalized.clientId,
       type: 'PROJECT_ASSIGNED',
-      title: `New project: ${project.name}`,
-      message: `${user.name} created a new project for you${project.dueDate ? ` (due ${new Date(project.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})` : ''}.`,
-      link: '/clients',
+      title: `New project: ${normalized.name}`,
+      message: `${user.name} created a new project for you${normalized.dueDate ? ` (due ${new Date(normalized.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})` : ''}.`,
+      link: '/projects',
     })
   }
 
-  return NextResponse.json({ data: project }, { status: 201 })
+  return NextResponse.json({ data: { ...normalized, _count: { tasks: 0, content: 0 } } }, { status: 201 })
 }

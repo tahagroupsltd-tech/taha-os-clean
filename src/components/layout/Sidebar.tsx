@@ -6,10 +6,12 @@ import {
   LayoutDashboard, CheckSquare, FileVideo, FolderKanban,
   Users, Settings, LogOut, Menu, X,
   Calendar, StickyNote, Wallet, ClipboardList, IndianRupee, CalendarRange,
+  TrendingUp, UserCircle, Target, ChevronDown, ChevronRight, BookMarked, Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useUIStore } from '@/store/ui.store'
+import { useState } from 'react'
 
 const NAV_ITEMS = [
   { href: '/overview', label: 'Overview', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'CLIENT'] },
@@ -21,20 +23,32 @@ const NAV_ITEMS = [
   // Finance + Billing are FOUNDER ONLY
   { href: '/finance', label: 'Finance', icon: Wallet, roles: ['ADMIN'] },
   { href: '/billing', label: 'Client Billing', icon: IndianRupee, roles: ['ADMIN'] },
-  { href: '/clients', label: 'Projects', icon: FolderKanban, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'CLIENT'] },
+  { href: '/projects', label: 'Projects', icon: FolderKanban, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'CLIENT'] },
   { href: '/reports', label: 'Daily Reports', icon: ClipboardList, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
   { href: '/team', label: 'Team', icon: Users, roles: ['ADMIN', 'MANAGER'] },
+  { href: '/sop', label: 'SOP Pipeline', icon: BookMarked, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE'] },
+  { href: '/ai-tools', label: 'AI Tools', icon: Sparkles, roles: ['ADMIN', 'MANAGER'] },
   { href: '/settings', label: 'Settings', icon: Settings, roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'CLIENT'] },
+]
+
+const CRM_ITEMS = [
+  { href: '/crm', label: 'Overview', icon: TrendingUp },
+  { href: '/crm/pipeline', label: 'Pipeline', icon: Target },
+  { href: '/crm/contacts', label: 'Contacts', icon: UserCircle },
+  { href: '/crm/deals', label: 'Deals', icon: IndianRupee },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const { sidebarOpen, setSidebarOpen } = useUIStore()
+  const [crmOpen, setCrmOpen] = useState(pathname.startsWith('/crm'))
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => user && item.roles.includes(user.role)
   )
+  const showCrm = user && ['ADMIN', 'MANAGER'].includes(user.role)
+  const crmActive = pathname.startsWith('/crm')
 
   return (
     <>
@@ -96,6 +110,54 @@ export function Sidebar() {
                 </Link>
               )
             })}
+
+            {/* CRM Section */}
+            {showCrm && (
+              <div className="pt-2">
+                <button
+                  onClick={() => setCrmOpen(o => !o)}
+                  className={cn(
+                    'flex items-center justify-between w-full px-3 py-2 rounded-md text-sm transition-colors',
+                    crmActive
+                      ? 'bg-stone-100 text-stone-900 font-medium'
+                      : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800'
+                  )}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <TrendingUp size={15} className={crmActive ? 'text-stone-900' : 'text-stone-400'} />
+                    <span>CRM</span>
+                  </div>
+                  {crmOpen
+                    ? <ChevronDown size={12} className="text-stone-400" />
+                    : <ChevronRight size={12} className="text-stone-400" />
+                  }
+                </button>
+                {crmOpen && (
+                  <div className="ml-4 mt-0.5 space-y-0.5 border-l border-stone-100 pl-2">
+                    {CRM_ITEMS.map(item => {
+                      const Icon = item.icon
+                      const active = pathname === item.href || (item.href !== '/crm' && pathname.startsWith(item.href))
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setSidebarOpen(false)}
+                          className={cn(
+                            'flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors',
+                            active
+                              ? 'bg-stone-100 text-stone-900 font-medium'
+                              : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800'
+                          )}
+                        >
+                          <Icon size={13} className={active ? 'text-stone-900' : 'text-stone-400'} />
+                          {item.label}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </nav>
 

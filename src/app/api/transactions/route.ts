@@ -1,56 +1,51 @@
 // src/app/api/transactions/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
-import { TransactionType, TransactionCategory } from '@prisma/client'
 import { canViewFinance, canEditFinance } from '@/lib/permissions'
+import { sbSelect, sbInsert, sbFindOne, TRANSACTION_SELECT, nowTs } from '@/lib/supa'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  // Founder-only — managers, employees, and clients are blocked
-  if (!canViewFinance(user.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  if (!canViewFinance(user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
-  const type = searchParams.get('type') as TransactionType | null
+  const type = searchParams.get('type')
   const from = searchParams.get('from')
   const to = searchParams.get('to')
 
-  const where: any = {}
-  if (type) where.type = type
-  if (from || to) {
-    where.date = {}
-    if (from) where.date.gte = new Date(from)
-    if (to) where.date.lte = new Date(to)
+  const filters: Record<string, string> = {}
+  if (type) filters.type = `eq.${type}`
+
+  const items = await sbSelect('transactions', {
+    select: TRANSACTION_SELECT,
+    filters,
+    order: 'date.desc',
+  })
+
+  // Date filtering in-memory
+  let data = items
+  if (from) {
+    const fromDate = new Date(from)
+    data = data.filter((t: any) => new Date(t.date) >= fromDate)
+  }
+  if (to) {
+    const toDate = new Date(to)
+    data = data.filter((t: any) => new Date(t.date) <= toDate)
   }
 
-  // sequential to avoid Supabase pooler prepared-statement collisions
-  const items = await db.transaction.findMany({
-    where,
-    include: {
-      owner: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true } },
-    },
-    orderBy: { date: 'desc' },
-  })
-  const totals = await db.transaction.groupBy({
-    by: ['type'],
-    where,
-    _sum: { amount: true },
-  })
-
-  const income = totals.find((t) => t.type === 'INCOME')?._sum.amount?.toString() ?? '0'
-  const expense = totals.find((t) => t.type === 'EXPENSE')?._sum.amount?.toString() ?? '0'
+  let income = 0
+  let expense = 0
+  for (const t of data) {
+    if (t.type === 'INCOME') income += parseFloat(t.amount)
+    else if (t.type === 'EXPENSE') expense += parseFloat(t.amount)
+  }
 
   return NextResponse.json({
-    data: items,
-    summary: {
-      income: parseFloat(income),
-      expense: parseFloat(expense),
-      net: parseFloat(income) - parseFloat(expense),
-    },
+    data,
+    summary: { income, expense, net: income - expense },
   })
 }
 
@@ -60,21 +55,10 @@ export async function POST(req: NextRequest) {
   if (!canEditFinance(user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { title, amount, type, category, notes, date, projectId } = body as {
-    title: string
-    amount: number | string
-    type: TransactionType
-    category?: TransactionCategory
-    notes?: string
-    date?: string
-    projectId?: string
-  }
+  const { title, amount, type, category, notes, date, projectId } = body
 
   if (!title || !amount || !type) {
-    return NextResponse.json(
-      { error: 'Title, amount, and type are required' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'Title, amount, and type are required' }, { status: 400 })
   }
 
   const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount
@@ -82,21 +66,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Amount must be a positive number' }, { status: 400 })
   }
 
-  const t = await db.transaction.create({
-    data: {
-      title,
-      amount: numericAmount,
-      type,
-      category: category ?? 'OTHER',
-      notes,
-      date: date ? new Date(date) : new Date(),
-      ownerId: user.id,
-      projectId: projectId || null,
-    },
-    include: {
-      owner: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true } },
-    },
+  const now = nowTs()
+  const t = await sbInsert('transactions', {
+    title,
+    amount: numericAmount,
+    type,
+    category: category ?? 'OTHER',
+    notes: notes || null,
+    date: date ? new Date(date).toISOString() : now,
+    ownerId: user.id,
+    projectId: projectId || null,
+    createdAt: now,
+    updatedAt: now,
   })
-  return NextResponse.json({ data: t }, { status: 201 })
+
+  const full = await sbFindOne('transactions', {
+    select: TRANSACTION_SELECT,
+    filters: { id: `eq.${t.id}` },
+  }) ?? t
+
+  return NextResponse.json({ data: full }, { status: 201 })
 }

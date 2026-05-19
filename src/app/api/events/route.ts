@@ -1,8 +1,10 @@
 // src/app/api/events/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
-import { EventType } from '@prisma/client'
+import { sbSelect, sbInsert, sbFindOne, EVENT_SELECT, nowTs } from '@/lib/supa'
+import { syncOsEventToGcal } from '@/lib/gcal'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req)
@@ -12,28 +14,38 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
 
-  const where: any = {}
-  // Clients only see events on their own projects
-  if (user.role === 'CLIENT') where.project = { clientId: user.id }
-  // Employees see their own events + events they own
-  if (user.role === 'EMPLOYEE') where.ownerId = user.id
+  const filters: Record<string, string> = {}
+  if (user.role === 'EMPLOYEE') filters.ownerId = `eq.${user.id}`
+  if (from) filters['startTime'] = `gte.${new Date(from).toISOString()}`
+  // PostgREST only supports one filter per key, handle 'to' separately via select params if needed
+  // For simplicity, we pass both and let the client filter — or use lte filter
+  // We'll store both filters and PostgREST handles them as AND conditions with same key as separate params
+  // Actually PostgREST supports multiple filters for same column via query string repetition
+  // supa.ts builds filters as &key=value so we handle from/to with separate keys
+  // Use a workaround: fetch and filter in-memory for date range
 
-  if (from || to) {
-    where.startTime = {}
-    if (from) where.startTime.gte = new Date(from)
-    if (to) where.startTime.lte = new Date(to)
-  }
-
-  const events = await db.event.findMany({
-    where,
-    include: {
-      owner: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true } },
-    },
-    orderBy: { startTime: 'asc' },
+  const events = await sbSelect('events', {
+    select: EVENT_SELECT,
+    filters,
+    order: 'startTime.asc',
   })
 
-  return NextResponse.json({ data: events })
+  let data = events
+
+  if (user.role === 'CLIENT') {
+    data = data.filter((e: any) => e.project?.clientId === user.id)
+  }
+
+  if (from) {
+    const fromDate = new Date(from)
+    data = data.filter((e: any) => new Date(e.startTime) >= fromDate)
+  }
+  if (to) {
+    const toDate = new Date(to)
+    data = data.filter((e: any) => new Date(e.startTime) <= toDate)
+  }
+
+  return NextResponse.json({ data })
 }
 
 export async function POST(req: NextRequest) {
@@ -42,41 +54,40 @@ export async function POST(req: NextRequest) {
   if (user.role === 'CLIENT') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { title, description, type, startTime, endTime, location, meetingLink, projectId } = body as {
-    title: string
-    description?: string
-    type?: EventType
-    startTime: string
-    endTime: string
-    location?: string
-    meetingLink?: string
-    projectId?: string
-  }
+  const { title, description, type, startTime, endTime, location, meetingLink, projectId } = body
 
   if (!title || !startTime || !endTime) {
-    return NextResponse.json(
-      { error: 'Title, startTime, and endTime are required' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'Title, startTime, and endTime are required' }, { status: 400 })
   }
 
-  const event = await db.event.create({
-    data: {
-      title,
-      description,
-      type: type ?? 'MEETING',
-      startTime: new Date(startTime),
-      endTime: new Date(endTime),
-      location,
-      meetingLink,
-      ownerId: user.id,
-      projectId: projectId || null,
-    },
-    include: {
-      owner: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true } },
-    },
+  const now = nowTs()
+  const event = await sbInsert('events', {
+    title,
+    description: description || null,
+    type: type ?? 'MEETING',
+    startTime: new Date(startTime).toISOString(),
+    endTime: new Date(endTime).toISOString(),
+    location: location || null,
+    meetingLink: meetingLink || null,
+    ownerId: user.id,
+    projectId: projectId || null,
+    createdAt: now,
+    updatedAt: now,
   })
 
-  return NextResponse.json({ data: event }, { status: 201 })
+  const full = await sbFindOne('events', {
+    select: EVENT_SELECT,
+    filters: { id: `eq.${event.id}` },
+  }) ?? event
+
+  // Fire-and-forget — sync to Google Calendar if the user has connected it
+  syncOsEventToGcal(user.id, {
+    osEventId: event.id,
+    title: event.title,
+    description: event.description ?? null,
+    startTime: event.startTime,
+    endTime: event.endTime,
+  }).catch(() => {})
+
+  return NextResponse.json({ data: full }, { status: 201 })
 }

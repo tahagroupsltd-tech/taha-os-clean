@@ -56,6 +56,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [cursor, setCursor] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string>(todayISO())
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Event | null>(null)
   const [form, setForm] = useState<EventForm>(EMPTY())
@@ -196,6 +197,7 @@ export default function CalendarPage() {
     if (res.ok) {
       toast.success('Deleted')
       setEvents((p) => p.filter((e) => e.id !== id))
+      setSelectedEvent(null)
     }
   }
 
@@ -220,7 +222,7 @@ export default function CalendarPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Calendar grid */}
-        <div className="flex-1 flex flex-col p-5 overflow-hidden">
+        <div className={cn('flex flex-col p-5 overflow-hidden transition-all', selectedEvent ? 'flex-1' : 'flex-1')}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-semibold text-stone-900">{monthLabel}</h2>
             <div className="flex items-center gap-1">
@@ -279,9 +281,11 @@ export default function CalendarPage() {
                     {dayEvents.slice(0, 2).map((e) => (
                       <div
                         key={e.id}
+                        onClick={(ev) => { ev.stopPropagation(); setSelectedEvent(e) }}
                         className={cn(
-                          'text-[9px] truncate px-1 py-0.5 rounded border',
-                          eventTypeColor(e.type)
+                          'text-[9px] truncate px-1 py-0.5 rounded border cursor-pointer hover:opacity-80',
+                          eventTypeColor(e.type),
+                          selectedEvent?.id === e.id && 'ring-1 ring-stone-900'
                         )}
                       >
                         {e.title}
@@ -297,86 +301,87 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Right panel: selected day */}
-        <div className="w-80 border-l border-stone-100 bg-stone-50/30 flex flex-col">
-          <div className="p-4 border-b border-stone-100">
-            <p className="text-[10px] uppercase tracking-wider text-stone-400 font-semibold">
-              {new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long' })}
-            </p>
-            <p className="text-base font-semibold text-stone-900">
-              {new Date(selectedDate).toLocaleDateString('en-IN', {
-                day: 'numeric', month: 'long', year: 'numeric',
-              })}
-            </p>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-2">
-            {loading ? (
-              <p className="text-xs text-stone-400 text-center py-8">Loading...</p>
-            ) : selectedDayEvents.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-xs text-stone-400 mb-3">No events on this day</p>
-                {user?.role !== 'CLIENT' && (
-                  <button
-                    onClick={() => openCreate(selectedDate)}
-                    className="text-xs text-stone-900 underline hover:no-underline"
+        {/* Right panel: shown only when an event is clicked */}
+        {selectedEvent && (
+          <div className="w-80 border-l border-stone-100 bg-white flex flex-col shadow-sm">
+            <div className="p-4 border-b border-stone-100 flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-stone-900 leading-snug mb-1">{selectedEvent.title}</p>
+                <span className={cn(
+                  'inline-block text-[9px] px-1.5 py-0.5 rounded border font-medium',
+                  eventTypeColor(selectedEvent.type)
+                )}>
+                  {EVENT_TYPE_LABELS[selectedEvent.type]}
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedEvent(null)}
+                className="p-1 text-stone-300 hover:text-stone-700 flex-shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="text-xs text-stone-600 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Clock size={12} className="text-stone-400" />
+                  <span>
+                    {new Date(selectedEvent.startTime).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {' · '}
+                    {formatTime(selectedEvent.startTime)}–{formatTime(selectedEvent.endTime)}
+                  </span>
+                </div>
+                {selectedEvent.location && (
+                  <div className="flex items-center gap-2">
+                    <MapPin size={12} className="text-stone-400" />
+                    <span className="truncate">{selectedEvent.location}</span>
+                  </div>
+                )}
+                {selectedEvent.meetingLink && (
+                  <a
+                    href={selectedEvent.meetingLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-blue-600 hover:underline"
                   >
-                    + Add event
-                  </button>
+                    <Video size={12} />
+                    <span className="truncate">Join meeting</span>
+                  </a>
+                )}
+                {selectedEvent.project && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[11px]">Project:</span>
+                    <span className="text-stone-600 text-[11px]">{selectedEvent.project.name}</span>
+                  </div>
                 )}
               </div>
-            ) : (
-              selectedDayEvents.map((e) => (
-                <div
-                  key={e.id}
-                  className="bg-white rounded-md border border-stone-100 p-3 hover:shadow-sm transition-shadow"
-                >
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-stone-900 mb-1 truncate">{e.title}</p>
-                      <span className={cn(
-                        'inline-block text-[9px] px-1.5 py-0.5 rounded border font-medium',
-                        eventTypeColor(e.type)
-                      )}>
-                        {EVENT_TYPE_LABELS[e.type]}
-                      </span>
-                    </div>
-                    {(user?.role === 'ADMIN' || user?.role === 'MANAGER' || e.ownerId === user?.id) && (
-                      <div className="flex gap-0.5 flex-shrink-0">
-                        <button onClick={() => openEdit(e)} className="p-1 text-stone-300 hover:text-stone-700">
-                          <Pencil size={10} />
-                        </button>
-                        <button onClick={() => handleDelete(e.id)} className="p-1 text-stone-300 hover:text-red-500">
-                          <Trash2 size={10} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-[10px] text-stone-500 space-y-1">
-                    <div className="flex items-center gap-1">
-                      <Clock size={10} />
-                      <span>{formatTime(e.startTime)}–{formatTime(e.endTime)}</span>
-                    </div>
-                    {e.location && (
-                      <div className="flex items-center gap-1">
-                        <MapPin size={10} />
-                        <span className="truncate">{e.location}</span>
-                      </div>
-                    )}
-                    {e.meetingLink && (
-                      <a href={e.meetingLink} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline">
-                        <Video size={10} />
-                        <span className="truncate">Join meeting</span>
-                      </a>
-                    )}
-                    {e.description && (
-                      <p className="text-stone-500 mt-1 line-clamp-2">{e.description}</p>
-                    )}
-                  </div>
+              {selectedEvent.description && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-stone-400 font-medium mb-1">Notes</p>
+                  <p className="text-xs text-stone-600 leading-relaxed bg-stone-50 rounded-md p-3">
+                    {selectedEvent.description}
+                  </p>
                 </div>
-              ))
+              )}
+            </div>
+            {(user?.role === 'ADMIN' || user?.role === 'MANAGER' || selectedEvent.ownerId === user?.id) && (
+              <div className="p-4 border-t border-stone-100 flex items-center gap-2">
+                <button
+                  onClick={() => { openEdit(selectedEvent); setSelectedEvent(null) }}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-md py-2 transition-colors"
+                >
+                  <Pencil size={11} /> Edit
+                </button>
+                <button
+                  onClick={() => handleDelete(selectedEvent.id)}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md py-2 transition-colors"
+                >
+                  <Trash2 size={11} /> Delete
+                </button>
+              </div>
             )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Event modal */}

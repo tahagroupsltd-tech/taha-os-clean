@@ -5,8 +5,9 @@ import { NextRequest } from 'next/server'
 import type { AuthUser } from '@/types'
 
 const jwtSecret = process.env.JWT_SECRET
+// Note: warn in logs if missing but don't throw at module level (would crash middleware/Edge)
 if (!jwtSecret && process.env.NODE_ENV === 'production') {
-  throw new Error('JWT_SECRET environment variable is not set. Cannot start in production without it.')
+  console.error('[AUTH] WARNING: JWT_SECRET is not set in production!')
 }
 const SECRET = new TextEncoder().encode(
   jwtSecret ?? 'taha-media-dev-only-secret-change-in-production-min-32-chars'

@@ -4,6 +4,8 @@ export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'CLIENT'
 
 export type ProjectStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED'
 
+export type KanbanStage = 'LEAD' | 'PROPOSAL_SENT' | 'ONBOARDING' | 'ACTIVE' | 'DELIVERED' | 'CLOSED'
+
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE'
 
 export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
@@ -41,11 +43,16 @@ export interface Project {
   name: string
   description?: string | null
   status: ProjectStatus
+  boardColumn: KanbanStage
   clientId?: string | null
   client?: { id: string; name: string } | null
   startDate?: string | null
   dueDate?: string | null
   driveFolder?: string | null
+  value?: number | null
+  sopLevel?: number | null
+  assignedToId?: string | null
+  assignedTo?: { id: string; name: string } | null
   createdAt: string
   _count?: { tasks: number; content: number }
 }

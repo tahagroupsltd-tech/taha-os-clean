@@ -2,8 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
 
-  // Prevent Prisma and bcryptjs from being bundled into the edge runtime
-  serverExternalPackages: ['@prisma/client', 'bcryptjs'],
+  // Prevent these packages from being bundled — they must run on Node.js only
+  // Next.js 14 uses experimental.serverComponentsExternalPackages
+  experimental: {
+    serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs', 'googleapis', 'google-auth-library'],
+  },
 
   // Compress responses
   compress: true,

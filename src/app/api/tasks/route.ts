@@ -1,113 +1,92 @@
 // src/app/api/tasks/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
-import { TaskStatus, TaskPriority } from '@prisma/client'
 import { notify } from '@/lib/notify'
 import { canCreateTasks } from '@/lib/permissions'
 import { syncTaskEvent } from '@/lib/gcal'
+import { sbSelect, sbInsert, sbFindOne, TASK_SELECT, nowTs } from '@/lib/supa'
 
-// GET /api/tasks
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
-  const status = searchParams.get('status') as TaskStatus | null
+  const status = searchParams.get('status')
   const projectId = searchParams.get('projectId')
 
-  const where: any = {}
-  if (status) where.status = status
-  if (projectId) where.projectId = projectId
+  const filters: Record<string, string> = {}
+  if (status) filters.status = `eq.${status}`
+  if (projectId) filters.projectId = `eq.${projectId}`
+  if (user.role === 'EMPLOYEE') filters.assignedToId = `eq.${user.id}`
 
-  // Employees see only their own tasks
-  if (user.role === 'EMPLOYEE') {
-    where.assignedToId = user.id
-  }
-  // Clients see tasks on their projects only
-  if (user.role === 'CLIENT') {
-    where.project = { clientId: user.id }
-  }
-
-  const tasks = await db.task.findMany({
-    where,
-    include: {
-      assignedTo: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true } },
-    },
-    orderBy: [{ priority: 'desc' }, { deadline: 'asc' }, { createdAt: 'desc' }],
+  const tasks = await sbSelect('tasks', {
+    select: TASK_SELECT,
+    filters,
+    order: 'priority.desc,deadline.asc,createdAt.desc',
   })
 
-  return NextResponse.json({ data: tasks })
+  // Client: filter by their projects client-side
+  const data = user.role === 'CLIENT'
+    ? tasks.filter((t: any) => t.project?.clientId === user.id)
+    : tasks
+
+  return NextResponse.json({ data })
 }
 
-// POST /api/tasks
 export async function POST(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!canCreateTasks(user.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  if (!canCreateTasks(user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { title, description, status, priority, deadline, assignedToId, projectId } =
-    body as {
-      title: string
-      description?: string
-      status?: TaskStatus
-      priority?: TaskPriority
-      deadline?: string
-      assignedToId?: string
-      projectId?: string
-    }
+  const { title, description, status, priority, deadline, assignedToId, projectId } = body
 
-  if (!title) {
-    return NextResponse.json({ error: 'Title is required' }, { status: 400 })
-  }
+  if (!title) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
 
-  const task = await db.task.create({
-    data: {
-      title,
-      description,
-      status: status ?? 'TODO',
-      priority: priority ?? 'MEDIUM',
-      deadline: deadline ? new Date(deadline) : null,
-      assignedToId: assignedToId || null,
-      createdById: user.id,
-      projectId: projectId || null,
-    },
-    include: {
-      assignedTo: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true } },
-    },
+  const now = nowTs()
+  const task = await sbInsert('tasks', {
+    title,
+    description: description || null,
+    status: status ?? 'TODO',
+    priority: priority ?? 'MEDIUM',
+    deadline: deadline ? new Date(deadline).toISOString() : null,
+    assignedToId: assignedToId || null,
+    createdById: user.id,
+    projectId: projectId || null,
+    createdAt: now,
+    updatedAt: now,
   })
 
-  // ── Notify the assignee (don't notify the person who created the task themselves) ──
-  if (task.assignedToId && task.assignedToId !== user.id) {
-    const projectLabel = task.project ? ` · ${task.project.name}` : ''
-    const dueLabel = task.deadline
-      ? ` (due ${new Date(task.deadline).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})`
+  // Fetch with relations
+  const full = await sbFindOne('tasks', {
+    select: TASK_SELECT,
+    filters: { id: `eq.${task.id}` },
+  }) ?? task
+
+  if (full.assignedToId && full.assignedToId !== user.id) {
+    const projectLabel = full.project ? ` · ${full.project.name}` : ''
+    const dueLabel = full.deadline
+      ? ` (due ${new Date(full.deadline).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})`
       : ''
     await notify({
-      userId: task.assignedToId,
+      userId: full.assignedToId,
       type: 'TASK_ASSIGNED',
-      title: `New task: ${task.title}`,
-      message: `${user.name} assigned you a ${task.priority.toLowerCase()} task${projectLabel}${dueLabel}.`,
+      title: `New task: ${full.title}`,
+      message: `${user.name} assigned you a ${full.priority.toLowerCase()} task${projectLabel}${dueLabel}.`,
       link: '/tasks',
     })
   }
 
-  // ── Sync to assignee's Google Calendar (fire-and-forget) ──
-  if (task.deadline && task.assignedToId) {
-    syncTaskEvent(task.id, {
-      title: task.title,
-      deadline: task.deadline,
-      assigneeId: task.assignedToId,
-      projectName: task.project?.name,
+  if (full.deadline && full.assignedToId) {
+    syncTaskEvent(full.id, {
+      title: full.title,
+      deadline: new Date(full.deadline),
+      assigneeId: full.assignedToId,
+      projectName: full.project?.name,
     }).catch(() => {})
   }
 
-  return NextResponse.json({ data: task }, { status: 201 })
+  return NextResponse.json({ data: full }, { status: 201 })
 }

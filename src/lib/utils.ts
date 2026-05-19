@@ -3,7 +3,7 @@ import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import type {
   TaskStatus, TaskPriority, ContentStatus, ProjectStatus,
-  EventType, TransactionType, TransactionCategory,
+  EventType, TransactionType, TransactionCategory, KanbanStage,
 } from '@/types'
 
 export function cn(...inputs: ClassValue[]) {
@@ -82,6 +82,27 @@ export function projectStatusColor(status: ProjectStatus): string {
     ARCHIVED: 'bg-stone-100 text-stone-500',
   }
   return map[status]
+}
+
+export const KANBAN_STAGE_LABELS: Record<KanbanStage, string> = {
+  LEAD: 'Lead',
+  PROPOSAL_SENT: 'Proposal Sent',
+  ONBOARDING: 'Onboarding',
+  ACTIVE: 'Active',
+  DELIVERED: 'Delivered',
+  CLOSED: 'Closed',
+}
+
+export function kanbanStageColor(stage: KanbanStage): string {
+  const map: Record<KanbanStage, string> = {
+    LEAD: 'bg-slate-100 text-slate-700 border-slate-200',
+    PROPOSAL_SENT: 'bg-blue-50 text-blue-700 border-blue-200',
+    ONBOARDING: 'bg-purple-50 text-purple-700 border-purple-200',
+    ACTIVE: 'bg-green-50 text-green-700 border-green-200',
+    DELIVERED: 'bg-amber-50 text-amber-700 border-amber-200',
+    CLOSED: 'bg-stone-100 text-stone-500 border-stone-200',
+  }
+  return map[stage] ?? 'bg-stone-100 text-stone-500 border-stone-200'
 }
 
 // ── Date helpers ──────────────────────────────────────────

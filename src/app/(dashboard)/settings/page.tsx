@@ -1,13 +1,12 @@
 // src/app/(dashboard)/settings/page.tsx
 import { getServerUser } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { sbSelect, sbCount, sbFindOne } from '@/lib/supa'
+import { isGCalConnected } from '@/lib/gcal'
 import { TopBar } from '@/components/layout/TopBar'
 import { formatDate } from '@/lib/utils'
 import { SettingsClient } from './settings-client'
 import {
-  canViewSystemStats,
-  canResetPassword,
-  ROLE_LABEL,
+  canViewSystemStats, canResetPassword, ROLE_LABEL,
 } from '@/lib/permissions'
 import type { Role } from '@/types'
 
@@ -21,37 +20,38 @@ export default async function SettingsPage() {
     try { return await fn() } catch (e) { console.error('[settings] query failed:', e); return fallback }
   }
 
-  // sequential to avoid pooler prepared-statement issues
-  const userCount = await safe(() => db.user.count(), 0)
-  const taskCount = await safe(() => db.task.count(), 0)
-  const contentCount = await safe(() => db.content.count(), 0)
-  const projectCount = await safe(() => db.project.count(), 0)
+  const [userCount, taskCount, contentCount, projectCount] = showSystemStats
+    ? await Promise.all([
+        safe(() => sbCount('users', {}), 0),
+        safe(() => sbCount('tasks', {}), 0),
+        safe(() => sbCount('content', {}), 0),
+        safe(() => sbCount('projects', {}), 0),
+      ])
+    : [0, 0, 0, 0]
 
-  // Both admins and managers see the user list (managers can reset non-admin passwords)
   const allUsers = showSystemStats
     ? await safe(
-        () => db.user.findMany({
-          orderBy: { createdAt: 'desc' },
-          select: { id: true, username: true, name: true, role: true, createdAt: true },
+        () => sbSelect('users', {
+          select: 'id,username,name,role,createdAt',
+          filters: {},
+          order: 'createdAt.desc',
         }),
         [] as any[]
       )
     : []
 
-  // Only show users in the password-reset dropdown that the current user can actually reset
   const resettableUsers = allUsers.filter((u: any) =>
     u.id !== user.id && canResetPassword(user.role, u.role as Role)
   )
 
-  // Google Calendar connection state
-  const gcalToken = await safe(
-    () => db.googleCalendarToken.findUnique({ where: { userId: user.id }, select: { id: true } }),
-    null
-  )
-  const gcalConnected = !!gcalToken
-  // Fetch current reminder preference
+  // Google Calendar connection state — uses direct REST, no RPC
+  const gcalConnected = await safe(() => isGCalConnected(user.id), false)
+
   const reminderUser = await safe(
-    () => db.user.findUnique({ where: { id: user.id }, select: { calendarReminderMins: true } }),
+    () => sbFindOne('users', {
+      select: 'calendarReminderMins',
+      filters: { id: `eq.${user.id}` },
+    }),
     null
   )
   const calendarReminderMins = reminderUser?.calendarReminderMins ?? null
@@ -136,12 +136,12 @@ export default async function SettingsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-50">
-                {allUsers.map((u) => (
+                {allUsers.map((u: any) => (
                   <tr key={u.id}>
                     <td className="px-5 py-3 font-medium text-stone-900">{u.name}</td>
                     <td className="px-5 py-3 text-stone-500 font-mono">{u.username}</td>
                     <td className="px-5 py-3 text-stone-500">{ROLE_LABEL[u.role as Role]}</td>
-                    <td className="px-5 py-3 text-stone-400">{formatDate(u.createdAt.toISOString())}</td>
+                    <td className="px-5 py-3 text-stone-400">{formatDate(u.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>

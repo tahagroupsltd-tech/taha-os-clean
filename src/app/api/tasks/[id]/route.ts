@@ -1,66 +1,50 @@
 // src/app/api/tasks/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { getUserFromRequest } from '@/lib/auth'
 import { notify } from '@/lib/notify'
 import { canDeleteTasks } from '@/lib/permissions'
 import { syncTaskEvent, deleteEntityCalendarEvents } from '@/lib/gcal'
+import { sbFindOne, sbUpdate, sbDelete, TASK_SELECT } from '@/lib/supa'
 
-// PATCH /api/tasks/:id
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export const dynamic = 'force-dynamic'
+
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (user.role === 'CLIENT') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const before = await db.task.findUnique({
-    where: { id: params.id },
-    include: { project: { select: { id: true, name: true } } },
+  const before = await sbFindOne('tasks', {
+    select: '*,project:projects!projectId(id,name)',
+    filters: { id: `eq.${params.id}` },
   })
   if (!before) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   let body = await req.json()
 
-  // Employees can only update tasks assigned to them, and only the status field
   if (user.role === 'EMPLOYEE') {
-    if (before.assignedToId !== user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-    // Strip everything except status
-    if (body.status === undefined) {
-      return NextResponse.json(
-        { error: 'Employees can only update task status' },
-        { status: 403 }
-      )
-    }
+    if (before.assignedToId !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (body.status === undefined) return NextResponse.json({ error: 'Employees can only update task status' }, { status: 403 })
     body = { status: body.status }
   }
 
-  const updated = await db.task.update({
-    where: { id: params.id },
-    data: {
-      ...body,
-      deadline: body.deadline ? new Date(body.deadline) : undefined,
-    },
-    include: {
-      assignedTo: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-      project: { select: { id: true, name: true } },
-    },
+  const patch: Record<string, any> = {}
+  const allowed = ['title', 'description', 'status', 'priority', 'deadline', 'assignedToId', 'projectId']
+  for (const k of allowed) {
+    if (body[k] !== undefined) {
+      patch[k] = k === 'deadline' && body[k] ? new Date(body[k]).toISOString() : (body[k] ?? null)
+    }
+  }
+
+  await sbUpdate('tasks', { id: `eq.${params.id}` }, patch)
+
+  const updated = await sbFindOne('tasks', {
+    select: TASK_SELECT,
+    filters: { id: `eq.${params.id}` },
   })
 
-  // ── Notifications ─────────────────────────────────
-  const projectLabel = updated.project ? ` · ${updated.project.name}` : ''
+  const projectLabel = updated?.project ? ` · ${updated.project.name}` : ''
 
-  // 1. Reassigned to a new user
-  if (
-    body.assignedToId !== undefined &&
-    body.assignedToId !== before.assignedToId &&
-    body.assignedToId &&
-    body.assignedToId !== user.id
-  ) {
+  if (body.assignedToId !== undefined && body.assignedToId !== before.assignedToId && body.assignedToId && body.assignedToId !== user.id) {
     await notify({
       userId: body.assignedToId,
       type: 'TASK_ASSIGNED',
@@ -70,33 +54,22 @@ export async function PATCH(
     })
   }
 
-  // 2. Status changed → ping the creator (unless they're the one updating)
-  if (
-    body.status !== undefined &&
-    body.status !== before.status &&
-    before.createdById &&
-    before.createdById !== user.id
-  ) {
+  if (body.status !== undefined && body.status !== before.status && before.createdById && before.createdById !== user.id) {
     const isDone = body.status === 'DONE'
     await notify({
       userId: before.createdById,
       type: isDone ? 'TASK_COMPLETED' : 'TASK_UPDATED',
-      title: isDone
-        ? `Task completed: ${updated.title}`
-        : `Task updated: ${updated.title}`,
+      title: isDone ? `Task completed: ${updated.title}` : `Task updated: ${updated.title}`,
       message: `${user.name} moved this task to ${body.status.replace('_', ' ').toLowerCase()}${projectLabel}.`,
       link: '/tasks',
     })
   }
 
-  // ── Sync updated task to Google Calendar (fire-and-forget) ──
-  const newAssignee = updated.assignedToId
-  const newDeadline = updated.deadline
-  if (newDeadline && newAssignee) {
+  if (updated?.deadline && updated?.assignedToId) {
     syncTaskEvent(updated.id, {
       title: updated.title,
-      deadline: newDeadline,
-      assigneeId: newAssignee,
+      deadline: new Date(updated.deadline),
+      assigneeId: updated.assignedToId,
       projectName: updated.project?.name,
     }).catch(() => {})
   }
@@ -104,18 +77,12 @@ export async function PATCH(
   return NextResponse.json({ data: updated })
 }
 
-// DELETE /api/tasks/:id
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!canDeleteTasks(user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  // Remove calendar events before deleting the task (fire-and-forget)
   deleteEntityCalendarEvents('task', params.id).catch(() => {})
-
-  await db.task.delete({ where: { id: params.id } })
+  await sbDelete('tasks', { id: `eq.${params.id}` })
   return NextResponse.json({ message: 'Deleted' })
 }

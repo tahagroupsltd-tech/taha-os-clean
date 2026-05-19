@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'crypto'
-import { db } from '@/lib/db'
+import { sbSelect } from '@/lib/supa'
 import { TOOL_DEFS, runTool } from '@/lib/agent/tools'
 import type { AuthUser } from '@/types'
 
@@ -55,11 +55,12 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 3. Resolve the admin/founder user from DB ────────────────
-    const adminRecord = await db.user.findFirst({
-      where: { role: 'ADMIN', isActive: true },
-      select: { id: true, username: true, name: true, role: true, phone: true },
-      orderBy: { createdAt: 'asc' },
+    const admins = await sbSelect('users', {
+      select: 'id,username,name,role,phone',
+      filters: { role: 'eq.ADMIN', isActive: 'eq.true' },
+      order: 'createdAt.asc',
     })
+    const adminRecord = admins[0] ?? null
     if (!adminRecord) {
       return NextResponse.json({ error: 'No active admin user found in database' }, { status: 500 })
     }

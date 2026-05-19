@@ -1,7 +1,7 @@
 // src/app/(dashboard)/billing/page.tsx
 import { redirect } from 'next/navigation'
 import { getServerUser } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { sbSelect } from '@/lib/supa'
 import { TopBar } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/Badge'
 import { formatMoney, formatDate } from '@/lib/utils'
@@ -15,30 +15,41 @@ export default async function BillingPage() {
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
 
-  // All projects with their client + income transactions
-  const projects = await db.project.findMany({
-    where: { status: { in: ['ACTIVE', 'PAUSED'] } },
-    include: {
-      client: { select: { id: true, name: true, username: true } },
-      transactions: {
-        where: { type: 'INCOME' },
-        orderBy: { date: 'desc' },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-  })
+  // All active/paused projects with client info
+  const projectsRaw = await sbSelect('projects', {
+    select: '*,client:users!clientId(id,name,username)',
+    filters: { status: 'in.(ACTIVE,PAUSED)' },
+    order: 'createdAt.desc',
+  }).catch(() => [] as any[])
+
+  // All income transactions
+  const allTransactions = await sbSelect('transactions', {
+    select: 'id,amount,date,projectId,type',
+    filters: { type: 'eq.INCOME' },
+    order: 'date.desc',
+  }).catch(() => [] as any[])
+
+  // Group transactions by project
+  const txByProject = new Map<string, any[]>()
+  for (const t of allTransactions) {
+    if (!t.projectId) continue
+    const arr = txByProject.get(t.projectId) ?? []
+    arr.push(t)
+    txByProject.set(t.projectId, arr)
+  }
 
   // Compute per-project metrics
-  const rows = projects.map((p) => {
-    const allIncome = p.transactions.reduce((s, t) => s + Number(t.amount), 0)
-    const thisMonthIncome = p.transactions
-      .filter((t) => t.date >= startOfMonth)
-      .reduce((s, t) => s + Number(t.amount), 0)
-    const lastPayment = p.transactions[0]
+  const rows = projectsRaw.map((p: any) => {
+    const transactions = txByProject.get(p.id) ?? []
+    const allIncome = transactions.reduce((s: number, t: any) => s + Number(t.amount), 0)
+    const thisMonthIncome = transactions
+      .filter((t: any) => new Date(t.date) >= startOfMonth)
+      .reduce((s: number, t: any) => s + Number(t.amount), 0)
+    const lastPayment = transactions[0] ?? null
     const daysSinceLast = lastPayment
-      ? Math.floor((Date.now() - lastPayment.date.getTime()) / (1000 * 60 * 60 * 24))
+      ? Math.floor((Date.now() - new Date(lastPayment.date).getTime()) / (1000 * 60 * 60 * 24))
       : null
-    const recentActivity = p.transactions.find((t) => t.date >= ninetyDaysAgo)
+    const recentActivity = transactions.find((t: any) => new Date(t.date) >= ninetyDaysAgo)
     const status: 'paid_this_month' | 'recent' | 'lapsed' | 'never' =
       thisMonthIncome > 0
         ? 'paid_this_month'
@@ -50,7 +61,7 @@ export default async function BillingPage() {
     return {
       id: p.id,
       project: p.name,
-      client: p.client,
+      client: p.client ?? null,
       status,
       allIncome,
       thisMonthIncome,
@@ -88,27 +99,21 @@ export default async function BillingPage() {
           <div className="stat-card">
             <div className="flex items-center gap-2 mb-2">
               <IndianRupee size={14} className="text-stone-500" />
-              <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">
-                Income this month
-              </p>
+              <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">Income this month</p>
             </div>
             <p className="text-xl font-bold text-stone-900">{formatMoney(totalIncomeThisMonth)}</p>
           </div>
           <div className="stat-card">
             <div className="flex items-center gap-2 mb-2">
               <IndianRupee size={14} className="text-stone-500" />
-              <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">
-                Income all time
-              </p>
+              <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">Income all time</p>
             </div>
             <p className="text-xl font-bold text-stone-900">{formatMoney(totalIncomeAllTime)}</p>
           </div>
           <div className="stat-card">
             <div className="flex items-center gap-2 mb-2">
               <CheckCircle2 size={14} className="text-green-600" />
-              <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">
-                Paid this month
-              </p>
+              <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">Paid this month</p>
             </div>
             <p className="text-xl font-bold text-stone-900">
               {paidThisMonthCount}<span className="text-sm text-stone-400 font-normal"> / {rows.length} projects</span>
@@ -117,13 +122,9 @@ export default async function BillingPage() {
           <div className="stat-card">
             <div className="flex items-center gap-2 mb-2">
               <AlertCircle size={14} className={lapsedCount > 0 ? 'text-red-500' : 'text-stone-400'} />
-              <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">
-                Lapsed (no payment 90d+)
-              </p>
+              <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">Lapsed (no payment 90d+)</p>
             </div>
-            <p className={`text-xl font-bold ${lapsedCount > 0 ? 'text-red-600' : 'text-stone-900'}`}>
-              {lapsedCount}
-            </p>
+            <p className={`text-xl font-bold ${lapsedCount > 0 ? 'text-red-600' : 'text-stone-900'}`}>{lapsedCount}</p>
           </div>
         </div>
 
@@ -166,19 +167,15 @@ export default async function BillingPage() {
                       <td className="px-5 py-3 text-right text-stone-500">
                         {r.lastPaymentDate ? (
                           <>
-                            <div>{formatDate(r.lastPaymentDate.toISOString())}</div>
+                            <div>{formatDate(r.lastPaymentDate)}</div>
                             <div className="text-[10px] text-stone-400">{formatMoney(r.lastPaymentAmount)}</div>
                           </>
                         ) : (
                           <span className="text-stone-300">—</span>
                         )}
                       </td>
-                      <td className="px-5 py-3 text-right font-semibold text-stone-900">
-                        {formatMoney(r.thisMonthIncome)}
-                      </td>
-                      <td className="px-5 py-3 text-right text-stone-700">
-                        {formatMoney(r.allIncome)}
-                      </td>
+                      <td className="px-5 py-3 text-right font-semibold text-stone-900">{formatMoney(r.thisMonthIncome)}</td>
+                      <td className="px-5 py-3 text-right text-stone-700">{formatMoney(r.allIncome)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -210,11 +207,9 @@ export default async function BillingPage() {
                       <StatusPill status={r.status} daysSinceLast={r.daysSinceLast} />
                     </td>
                     <td className="px-5 py-3 text-right text-stone-500">
-                      {r.lastPaymentDate ? formatDate(r.lastPaymentDate.toISOString()) : '—'}
+                      {r.lastPaymentDate ? formatDate(r.lastPaymentDate) : '—'}
                     </td>
-                    <td className="px-5 py-3 text-right font-semibold text-stone-900">
-                      {formatMoney(r.allIncome)}
-                    </td>
+                    <td className="px-5 py-3 text-right font-semibold text-stone-900">{formatMoney(r.allIncome)}</td>
                   </tr>
                 ))}
               </tbody>

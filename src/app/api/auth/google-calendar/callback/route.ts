@@ -26,9 +26,16 @@ export async function GET(req: NextRequest) {
     await exchangeCodeAndStore(code, user.id)
     return NextResponse.redirect(`${appUrl}/settings?gcal=connected`)
   } catch (err: any) {
-    console.error('[gcal callback]', err)
-    const isRevoke = err?.message?.startsWith('NEEDS_REVOKE')
-    const reason = isRevoke ? 'needs_revoke' : 'token_exchange_failed'
-    return NextResponse.redirect(`${appUrl}/settings?gcal_error=${reason}`)
+    const msg = err?.message ?? 'unknown_error'
+    console.error('[gcal callback] exchange failed:', msg)
+    const isRevoke = msg.startsWith('NEEDS_REVOKE')
+    let reason: string
+    if (isRevoke) {
+      reason = 'needs_revoke'
+    } else {
+      // Pass the raw error detail (first 80 chars) so the UI shows exactly what failed
+      reason = msg.replace(/\s+/g, '_').slice(0, 80)
+    }
+    return NextResponse.redirect(`${appUrl}/settings?gcal_error=${encodeURIComponent(reason)}`)
   }
 }

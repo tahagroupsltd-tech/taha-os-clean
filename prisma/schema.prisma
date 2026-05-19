@@ -107,6 +107,15 @@ model User {
   notifications   Notification[] @relation("NotificationRecipient")
   gcalToken       GoogleCalendarToken?
 
+  // CRM relations
+  crmCompaniesCreated  CrmCompany[]  @relation("CrmCompanyCreator")
+  crmContactsCreated   CrmContact[]  @relation("CrmContactCreator")
+  crmLeadsAssigned     CrmLead[]     @relation("CrmLeadAssignee")
+  crmLeadsCreated      CrmLead[]     @relation("CrmLeadCreator")
+  crmDealsAssigned     CrmDeal[]     @relation("CrmDealAssignee")
+  crmDealsCreated      CrmDeal[]     @relation("CrmDealCreator")
+  crmActivitiesCreated CrmActivity[] @relation("CrmActivityCreator")
+
   @@map("users")
 }
 
@@ -148,6 +157,9 @@ model Project {
   startDate   DateTime?
   dueDate     DateTime?
   driveFolder String?       // Google Drive folder URL for this project
+  boardColumn String        @default("ACTIVE")  // tracks kanban stage
+  sopLevel    Int?          // 1–7 matching the SOP pipeline levels
+  value       Decimal?      @db.Decimal(12, 2)  // project monetary value
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -158,9 +170,12 @@ model Project {
   events       Event[]
   notes        Note[]
   transactions Transaction[]
+  crmLeads     CrmLead[]
+  crmDeals     CrmDeal[]
 
   @@map("projects")
 }
+
 
 model Task {
   id           String       @id @default(cuid())
@@ -310,4 +325,128 @@ model DailyReport {
   @@unique([ownerId, date])
   @@index([date])
   @@map("daily_reports")
+}
+
+// ─── CRM Module ──────────────────────────────────────────────────────────────
+
+model CrmCompany {
+  id          String   @id @default(cuid())
+  name        String
+  industry    String?
+  website     String?
+  address     String?
+  notes       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy   User?        @relation("CrmCompanyCreator", fields: [createdById], references: [id])
+  contacts    CrmContact[]
+  leads       CrmLead[]
+  deals       CrmDeal[]
+
+  @@map("crm_companies")
+}
+
+model CrmContact {
+  id          String   @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  position    String?
+  companyId   String?
+  notes       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     CrmCompany?   @relation(fields: [companyId], references: [id])
+  createdBy   User?         @relation("CrmContactCreator", fields: [createdById], references: [id])
+  leads       CrmLead[]
+  deals       CrmDeal[]
+  activities  CrmActivity[]
+
+  @@map("crm_contacts")
+}
+
+model CrmLead {
+  id                String   @id @default(cuid())
+  title             String
+  stage             String   @default("NEW")
+  source            String   @default("OTHER")
+  value             Decimal? @db.Decimal(12, 2)
+  contactId         String?
+  companyId         String?
+  assignedToId      String?
+  projectId         String?
+  notes             String?
+  expectedCloseDate DateTime? @db.Date
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  contact     CrmContact? @relation(fields: [contactId], references: [id])
+  company     CrmCompany? @relation(fields: [companyId], references: [id])
+  assignedTo  User?       @relation("CrmLeadAssignee", fields: [assignedToId], references: [id])
+  project     Project?    @relation(fields: [projectId], references: [id])
+  createdBy   User?       @relation("CrmLeadCreator", fields: [createdById], references: [id])
+  deals       CrmDeal[]
+  activities  CrmActivity[]
+
+  @@index([stage])
+  @@index([assignedToId])
+  @@map("crm_leads")
+}
+
+model CrmDeal {
+  id           String   @id @default(cuid())
+  title        String
+  value        Decimal? @db.Decimal(12, 2)
+  stage        String   @default("PROPOSAL")
+  probability  Int      @default(50)
+  closeDate    DateTime? @db.Date
+  leadId       String?
+  contactId    String?
+  companyId    String?
+  projectId    String?
+  assignedToId String?
+  notes        String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  lead        CrmLead?    @relation(fields: [leadId], references: [id])
+  contact     CrmContact? @relation(fields: [contactId], references: [id])
+  company     CrmCompany? @relation(fields: [companyId], references: [id])
+  project     Project?    @relation(fields: [projectId], references: [id])
+  assignedTo  User?       @relation("CrmDealAssignee", fields: [assignedToId], references: [id])
+  createdBy   User?       @relation("CrmDealCreator", fields: [createdById], references: [id])
+  activities  CrmActivity[]
+
+  @@index([stage])
+  @@map("crm_deals")
+}
+
+model CrmActivity {
+  id          String   @id @default(cuid())
+  type        String   @default("NOTE")
+  subject     String
+  description String?
+  dueDate     DateTime?
+  completed   Boolean  @default(false)
+  leadId      String?
+  dealId      String?
+  contactId   String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lead        CrmLead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  deal        CrmDeal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  contact     CrmContact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  createdBy   User?       @relation("CrmActivityCreator", fields: [createdById], references: [id])
+
+  @@index([leadId])
+  @@index([dealId])
+  @@map("crm_activities")
 }
