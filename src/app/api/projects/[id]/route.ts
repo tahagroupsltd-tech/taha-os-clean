@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const [tasks, content, taskCount, contentCount] = await Promise.all([
+  const [tasks, content, taskCount, contentCount, transactionCount, eventCount, noteCount] = await Promise.all([
     sbSelect('tasks', {
       select: TASK_SELECT,
       filters: { projectId: `eq.${params.id}` },
@@ -39,6 +39,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }),
     sbCount('tasks', { projectId: `eq.${params.id}` }),
     sbCount('content', { projectId: `eq.${params.id}` }),
+    sbCount('transactions', { projectId: `eq.${params.id}` }),
+    sbCount('events', { projectId: `eq.${params.id}` }),
+    sbCount('notes', { projectId: `eq.${params.id}` }),
   ])
 
   return NextResponse.json({
@@ -46,7 +49,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       ...project,
       tasks,
       content,
-      _count: { tasks: taskCount, content: contentCount },
+      _count: {
+        tasks: taskCount,
+        content: contentCount,
+        transactions: transactionCount,
+        events: eventCount,
+        notes: noteCount,
+      },
     },
   })
 }

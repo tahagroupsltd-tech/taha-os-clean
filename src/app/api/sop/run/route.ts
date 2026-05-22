@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 // ─── SOP task/event blueprints per level ──────────────────────────────────────
 
-function getBlueprint(level: number, projectId: string, userId: string, now: string) {
+export function getBlueprint(level: number, projectId: string, userId: string, now: string) {
   const base = { createdById: userId, projectId, status: 'TODO', createdAt: now, updatedAt: now }
 
   // Shoot schedule: 2 days from now
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null)
-  const { level, projectId } = body ?? {}
+  const { level, projectId, assignedToId } = body ?? {}
 
   if (!level || !projectId) {
     return NextResponse.json({ error: 'level and projectId are required' }, { status: 400 })
@@ -173,7 +173,10 @@ export async function POST(req: NextRequest) {
   const createdTasks: any[] = []
   for (const task of blueprint.tasks) {
     try {
-      const created = await sbInsert('tasks', task)
+      const created = await sbInsert('tasks', {
+        ...task,
+        assignedToId: assignedToId || null,
+      })
       createdTasks.push(created)
     } catch (e) {
       console.error('Failed to create SOP task:', e)

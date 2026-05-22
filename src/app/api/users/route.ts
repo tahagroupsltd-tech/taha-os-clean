@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   if (role) filters.role = `eq.${role}`
 
   const users = await sbSelect('users', {
-    select: 'id,username,name,role,phone,isActive,createdAt',
+    select: 'id,username,name,role,phone,email,isActive,createdAt',
     filters,
     order: 'createdAt.desc',
   })

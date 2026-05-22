@@ -1,7 +1,7 @@
 // src/app/api/tasks/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
-import { notify } from '@/lib/notify'
+import { notify, triggerWhatsAppNotification } from '@/lib/notify'
 import { canDeleteTasks } from '@/lib/permissions'
 import { syncTaskEvent, deleteEntityCalendarEvents } from '@/lib/gcal'
 import { sbFindOne, sbUpdate, sbDelete, TASK_SELECT } from '@/lib/supa'
@@ -14,7 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (user.role === 'CLIENT') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const before = await sbFindOne('tasks', {
-    select: '*,project:projects!projectId(id,name)',
+    select: TASK_SELECT,
     filters: { id: `eq.${params.id}` },
   })
   if (!before) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -45,12 +45,20 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const projectLabel = updated?.project ? ` · ${updated.project.name}` : ''
 
   if (body.assignedToId !== undefined && body.assignedToId !== before.assignedToId && body.assignedToId && body.assignedToId !== user.id) {
+    const dueLabelReassign = updated?.deadline
+      ? ` (due ${new Date(updated.deadline).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})`
+      : ''
     await notify({
       userId: body.assignedToId,
       type: 'TASK_ASSIGNED',
       title: `Task reassigned to you: ${updated.title}`,
       message: `${user.name} reassigned this ${updated.priority.toLowerCase()} task to you${projectLabel}.`,
       link: '/tasks',
+      gcalEvent: {
+        title: `📋 Task: ${updated.title}`,
+        description: `${user.name} reassigned this task to you${projectLabel}${dueLabelReassign}.`,
+        date: updated?.deadline ? new Date(updated.deadline) : new Date(),
+      },
     })
   }
 
@@ -66,12 +74,33 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   if (updated?.deadline && updated?.assignedToId) {
-    syncTaskEvent(updated.id, {
+    await syncTaskEvent(updated.id, {
       title: updated.title,
       deadline: new Date(updated.deadline),
       assigneeId: updated.assignedToId,
       projectName: updated.project?.name,
     }).catch(() => {})
+  }
+
+  // Trigger WhatsApp notification on task update/completion
+  const changes: Record<string, { before: any; after: any }> = {}
+  let hasChanges = false
+  for (const k of allowed) {
+    if (body[k] !== undefined && body[k] !== before[k]) {
+      changes[k] = { before: before[k] ?? null, after: body[k] ?? null }
+      hasChanges = true
+    }
+  }
+
+  if (hasChanges && updated) {
+    const isDone = body.status === 'DONE'
+    const eventType = isDone ? 'task.done' : 'task.updated'
+    await triggerWhatsAppNotification({
+      event: eventType,
+      task: updated,
+      updatedBy: { id: user.id, name: user.name, role: user.role },
+      changes,
+    }).catch((err) => console.error('[whatsapp-notification] error:', err))
   }
 
   return NextResponse.json({ data: updated })
@@ -82,7 +111,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!canDeleteTasks(user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  deleteEntityCalendarEvents('task', params.id).catch(() => {})
+  await deleteEntityCalendarEvents('task', params.id).catch(() => {})
   await sbDelete('tasks', { id: `eq.${params.id}` })
   return NextResponse.json({ message: 'Deleted' })
 }

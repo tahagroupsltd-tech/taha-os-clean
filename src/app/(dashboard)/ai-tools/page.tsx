@@ -88,12 +88,18 @@ const SOP_ACTIONS = [
 // ─── Inline SOP Run Modal ─────────────────────────────────────────────────────
 function SOPRunModal({ level, onClose }: { level: number; onClose: () => void }) {
   const [projects, setProjects] = useState<{ id: string; name: string; sopLevel: number | null }[]>([])
+  const [users, setUsers] = useState<{ id: string; name: string; role: string }[]>([])
   const [selectedProject, setSelectedProject] = useState('')
+  const [selectedUser, setSelectedUser] = useState('')
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/projects').then(r => r.json()).then(j => setProjects(j.data ?? []))
+    fetch('/api/users').then(r => r.json()).then(j => {
+      const team = (j.data ?? []).filter((u: any) => u.role !== 'CLIENT')
+      setUsers(team)
+    })
   }, [])
 
   const run = async () => {
@@ -103,7 +109,7 @@ function SOPRunModal({ level, onClose }: { level: number; onClose: () => void })
       const res = await fetch('/api/sop/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ level, projectId: selectedProject }),
+        body: JSON.stringify({ level, projectId: selectedProject, assignedToId: selectedUser || null }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
@@ -126,15 +132,27 @@ function SOPRunModal({ level, onClose }: { level: number; onClose: () => void })
             <p className="text-xs text-green-700 leading-relaxed">{done}</p>
           </div>
         ) : (
-          <div className="mb-4">
-            <label className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider block mb-1.5">Select Project</label>
-            <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)}
-              className="w-full text-sm border border-stone-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-stone-400">
-              <option value="">— Choose a project —</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}{p.sopLevel ? ` (L${p.sopLevel})` : ''}</option>
-              ))}
-            </select>
+          <div className="mb-4 space-y-4">
+            <div>
+              <label className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider block mb-1.5">Select Project</label>
+              <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)}
+                className="w-full text-sm border border-stone-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-stone-400">
+                <option value="">— Choose a project —</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}{p.sopLevel ? ` (L${p.sopLevel})` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider block mb-1.5">Assign Tasks To</label>
+              <select value={selectedUser} onChange={e => setSelectedUser(e.target.value)}
+                className="w-full text-sm border border-stone-200 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-stone-400">
+                <option value="">— Unassigned (None) —</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.role.toLowerCase()})</option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
         <div className="flex gap-2">
@@ -164,31 +182,34 @@ export default function AIToolsPage() {
   const [loading, setLoading] = useState(false)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
   const [sopModal, setSopModal] = useState<number | null>(null)
+  const [viewMode, setViewMode] = useState<'chat' | 'templates'>('chat')
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
-
   const send = async (text: string) => {
     const trimmed = text.trim()
     if (!trimmed || loading) return
 
     const userMsg: Message = { role: 'user', content: trimmed, ts: Date.now() }
-    setMessages(prev => [...prev, userMsg])
+    const updatedMessages = [...messages, userMsg]
+    setMessages(updatedMessages)
     setInput('')
     setLoading(true)
 
     try {
-      const res = await fetch('/api/ai', {
+      const payload = {
+        messages: updatedMessages.map(m => ({ role: m.role, content: m.content }))
+      }
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: trimmed }),
+        body: JSON.stringify(payload),
       })
       const json = await res.json()
       const reply =
-        json?.data?.message ??
-        json?.data?.idea ??
+        json?.reply ??
         (json?.error ? `Error: ${json.error}` : 'No response from AI.')
 
       setMessages(prev => [...prev, { role: 'assistant', content: reply, ts: Date.now() }])
@@ -215,12 +236,24 @@ export default function AIToolsPage() {
     <div className="flex flex-col h-full overflow-hidden">
       <TopBar title="AI Tools" />
       {sopModal !== null && canRun && (
-        <SOPRunModal level={sopModal} onClose={() => setSopModal(null)} />
+        <SOPRunModal level={sopModal} onClose={() => { setSopModal(null); setViewMode('chat') }} />
       )}
 
       <div className="flex-1 overflow-hidden flex flex-col lg:flex-row gap-0">
         {/* ── Left panel: prompt cards + SOP quick-actions ── */}
-        <div className="w-full lg:w-72 flex-shrink-0 border-r border-stone-100 overflow-y-auto p-4 space-y-5 bg-stone-50/50">
+        <div className={cn(
+          "w-full lg:w-72 flex-shrink-0 border-r border-stone-100 overflow-y-auto p-4 space-y-5 bg-stone-50/50",
+          viewMode === 'chat' ? 'hidden lg:block' : 'block'
+        )}>
+          <div className="lg:hidden flex items-center justify-between border-b border-stone-100 pb-2.5">
+            <span className="text-xs font-semibold text-stone-700">Templates & SOPs</span>
+            <button
+              onClick={() => setViewMode('chat')}
+              className="text-xs text-stone-500 hover:text-stone-900 font-medium underline"
+            >
+              Back to Chat
+            </button>
+          </div>
           {/* Header blurb */}
           <div className="flex items-start gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-stone-900 flex items-center justify-center flex-shrink-0">
@@ -241,7 +274,14 @@ export default function AIToolsPage() {
               {SOP_ACTIONS.map(({ level, label, color }) => (
                 <button
                   key={level}
-                  onClick={() => canRun ? setSopModal(level) : setInput(`Run L${level} SOP for [project name]`)}
+                  onClick={() => {
+                    if (canRun) {
+                      setSopModal(level)
+                    } else {
+                      setInput(`Run L${level} SOP for [project name]`)
+                      setViewMode('chat')
+                    }
+                  }}
                   className={cn(
                     'text-[10px] font-semibold px-2 py-1.5 rounded-md text-left border transition-opacity hover:opacity-80',
                     color, 'border-transparent'
@@ -260,7 +300,7 @@ export default function AIToolsPage() {
               {PROMPT_CARDS.map((card) => (
                 <button
                   key={card.label}
-                  onClick={() => setInput(card.prompt)}
+                  onClick={() => { setInput(card.prompt); setViewMode('chat') }}
                   className={cn(
                     'w-full text-left rounded-lg border p-3 transition-all hover:shadow-sm group',
                     card.color
@@ -281,14 +321,23 @@ export default function AIToolsPage() {
         </div>
 
         {/* ── Right panel: chat ── */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-white">
+        <div className={cn(
+          "flex-1 flex flex-col overflow-hidden bg-white",
+          viewMode === 'templates' ? 'hidden lg:flex' : 'flex'
+        )}>
           {/* Chat header */}
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-stone-100 flex-shrink-0">
             <div className="flex items-center gap-2">
               <MessageSquare size={13} className="text-stone-400" />
-              <span className="text-xs font-medium text-stone-600">Chat</span>
+              <span className="text-xs font-medium text-stone-600 mr-1">Chat</span>
+              <button
+                onClick={() => setViewMode('templates')}
+                className="lg:hidden flex items-center gap-1 text-[10px] text-stone-500 hover:text-stone-700 bg-stone-100 hover:bg-stone-200 px-2 py-0.5 rounded-full transition-colors"
+              >
+                Templates & SOPs
+              </button>
               {messages.length > 0 && (
-                <span className="text-[10px] text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-full">
+                <span className="text-[10px] text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-full hidden sm:inline-block">
                   {messages.length} messages
                 </span>
               )}

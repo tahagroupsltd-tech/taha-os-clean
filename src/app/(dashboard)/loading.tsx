@@ -22,7 +22,7 @@ export default function DashboardLoading() {
         </div>
 
         {/* Finance strip skeleton */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="stat-card space-y-2">
               <div className="skeleton-shimmer h-3 w-24 rounded" />
@@ -51,7 +51,7 @@ export default function DashboardLoading() {
               </div>
             </div>
           ))}
-        </div>
+          </div>
       </div>
     </div>
   )

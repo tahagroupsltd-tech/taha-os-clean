@@ -23,7 +23,9 @@ export default async function SchedulePage() {
       filters: { isActive: 'eq.true' },
       order: 'name.asc',
     }).then((users: any[]) =>
-      users.filter((u: any) => ['EMPLOYEE', 'MANAGER'].includes(u.role))
+      users.filter((u: any) =>
+        ['EMPLOYEE', 'EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER', 'MANAGER'].includes(u.role)
+      )
     ).catch(() => [] as any[]),
   ])
 

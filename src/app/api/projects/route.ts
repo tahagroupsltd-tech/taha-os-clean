@@ -20,14 +20,26 @@ export async function GET(req: NextRequest) {
     order: 'createdAt.desc',
   })
 
-  // Attach task/content counts in parallel
+  // Attach task/content/transaction/event/note counts in parallel
   const withCounts = await Promise.all(
     projects.map(async (p: any) => {
-      const [taskCount, contentCount] = await Promise.all([
+      const [taskCount, contentCount, transactionCount, eventCount, noteCount] = await Promise.all([
         sbCount('tasks', { projectId: `eq.${p.id}` }),
         sbCount('content', { projectId: `eq.${p.id}` }),
+        sbCount('transactions', { projectId: `eq.${p.id}` }),
+        sbCount('events', { projectId: `eq.${p.id}` }),
+        sbCount('notes', { projectId: `eq.${p.id}` }),
       ])
-      return { ...normalizeProject(p), _count: { tasks: taskCount, content: contentCount } }
+      return {
+        ...normalizeProject(p),
+        _count: {
+          tasks: taskCount,
+          content: contentCount,
+          transactions: transactionCount,
+          events: eventCount,
+          notes: noteCount,
+        },
+      }
     })
   )
 

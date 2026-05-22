@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
 import { sbFindOne, sbUpdate, sbDelete, EVENT_SELECT } from '@/lib/supa'
+import { syncOsEventToGcal, deleteEntityCalendarEvents } from '@/lib/gcal'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +34,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     filters: { id: `eq.${params.id}` },
   })
 
+  if (updated) {
+    await syncOsEventToGcal(updated.ownerId, {
+      osEventId: updated.id,
+      title: updated.title,
+      description: updated.description ?? null,
+      startTime: updated.startTime,
+      endTime: updated.endTime,
+    }).catch(() => {})
+  }
+
   return NextResponse.json({ data: updated })
 }
 
@@ -46,6 +57,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  await deleteEntityCalendarEvents('os_event', params.id).catch(() => {})
   await sbDelete('events', { id: `eq.${params.id}` })
   return NextResponse.json({ message: 'Deleted' })
 }

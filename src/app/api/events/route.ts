@@ -80,8 +80,9 @@ export async function POST(req: NextRequest) {
     filters: { id: `eq.${event.id}` },
   }) ?? event
 
-  // Fire-and-forget — sync to Google Calendar if the user has connected it
-  syncOsEventToGcal(user.id, {
+
+  // Sync to Google Calendar if the user has connected it
+  await syncOsEventToGcal(user.id, {
     osEventId: event.id,
     title: event.title,
     description: event.description ?? null,

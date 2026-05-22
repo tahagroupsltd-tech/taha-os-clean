@@ -76,11 +76,16 @@ export async function POST(req: NextRequest) {
       title: `New task: ${full.title}`,
       message: `${user.name} assigned you a ${full.priority.toLowerCase()} task${projectLabel}${dueLabel}.`,
       link: '/tasks',
+      gcalEvent: {
+        title: `📋 New task: ${full.title}`,
+        description: `${user.name} assigned you this task${projectLabel}${dueLabel}.`,
+        date: full.deadline ? new Date(full.deadline) : new Date(),
+      },
     })
   }
 
   if (full.deadline && full.assignedToId) {
-    syncTaskEvent(full.id, {
+    await syncTaskEvent(full.id, {
       title: full.title,
       deadline: new Date(full.deadline),
       assigneeId: full.assignedToId,

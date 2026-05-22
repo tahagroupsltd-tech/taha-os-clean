@@ -1,15 +1,39 @@
 'use client'
 // src/app/(dashboard)/calendar/page.tsx
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { useAuthStore } from '@/store/auth.store'
-import { EVENT_TYPE_LABELS, eventTypeColor, formatTime, cn } from '@/lib/utils'
-import type { Event, EventType } from '@/types'
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, Video, MapPin, Clock } from 'lucide-react'
+import {
+  EVENT_TYPE_LABELS,
+  eventTypeColor,
+  formatTime,
+  cn,
+  taskStatusColor,
+  taskPriorityColor,
+  contentStatusColor,
+  TASK_STATUS_LABELS,
+  TASK_PRIORITY_LABELS,
+  CONTENT_STATUS_LABELS,
+} from '@/lib/utils'
+import type { Event, EventType, Task, Content, TaskStatus, TaskPriority, ContentStatus } from '@/types'
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Video,
+  MapPin,
+  Clock,
+  ListTodo,
+  ExternalLink,
+  Scissors,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const TYPE_OPTIONS = Object.entries(EVENT_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))
@@ -26,11 +50,40 @@ interface EventForm {
   projectId: string
 }
 
-const todayISO = () => new Date().toISOString().split('T')[0]
+interface CalendarItem {
+  id: string // composite, e.g. `event-${e.id}`, `task-${t.id}`, `post-${c.id}`, `edit-${c.id}`
+  title: string
+  rawTitle: string
+  description: string | null
+  startTime: string
+  endTime: string
+  calendarType: 'event' | 'task' | 'content_post' | 'content_edit'
+  eventType?: EventType
+  assigneeName?: string | null
+  projectName?: string | null
+  projectId?: string | null
+  status?: string | null
+  priority?: string | null
+  driveLink?: string | null
+  originalItem: any
+}
+
+// Timezone safe local YYYY-MM-DD formatter
+const toLocalYYYYMMDD = (dateOrStr: Date | string) => {
+  const d = new Date(dateOrStr)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const r = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${r}`
+}
+
+const todayISO = () => toLocalYYYYMMDD(new Date())
+
 const nowHHMM = () => {
   const d = new Date()
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
+
 const plusHourHHMM = () => {
   const d = new Date()
   d.setHours(d.getHours() + 1)
@@ -49,18 +102,143 @@ const EMPTY = (): EventForm => ({
   projectId: '',
 })
 
+function formatDuration(ms: number) {
+  const seconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (days > 0) {
+    const hr = hours % 24
+    return hr > 0 ? `${days}d ${hr}h` : `${days}d`
+  }
+  if (hours > 0) {
+    const min = minutes % 60
+    return min > 0 ? `${hours}h ${min}m` : `${hours}h`
+  }
+  if (minutes > 0) {
+    return `${minutes}m`
+  }
+  return '1m'
+}
+
+function getTimerMiniLabel(item: CalendarItem, now: Date) {
+  const target = new Date(item.startTime)
+  const diff = target.getTime() - now.getTime()
+  if (diff < 0) return '!'
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  return `${days}d`
+}
+
+function getTimerInfo(item: CalendarItem, now: Date) {
+  if (item.calendarType === 'task' && item.status === 'DONE') {
+    return {
+      timeLeftStr: 'Completed',
+      colorClasses: 'bg-green-50 text-green-700 border-green-200',
+      timerColor: 'green',
+      isOverdue: false,
+      isComplete: true,
+    }
+  }
+
+  if (
+    (item.calendarType === 'content_post' || item.calendarType === 'content_edit') &&
+    item.status === 'POSTED'
+  ) {
+    return {
+      timeLeftStr: 'Published',
+      colorClasses: 'bg-green-50 text-green-700 border-green-200',
+      timerColor: 'green',
+      isOverdue: false,
+      isComplete: true,
+    }
+  }
+
+  const target = new Date(item.startTime)
+  const diff = target.getTime() - now.getTime()
+
+  if (diff < 0) {
+    return {
+      timeLeftStr: `Overdue by ${formatDuration(Math.abs(diff))}`,
+      colorClasses: 'bg-red-50 text-red-700 border-red-200',
+      timerColor: 'red',
+      isOverdue: true,
+      isComplete: false,
+    }
+  }
+
+  // < 12h
+  if (diff < 12 * 60 * 60 * 1000) {
+    return {
+      timeLeftStr: `${formatDuration(diff)} remaining`,
+      colorClasses: 'bg-red-50 text-red-700 border-red-200',
+      timerColor: 'red',
+      isOverdue: false,
+      isComplete: false,
+    }
+  }
+
+  // < 24h
+  if (diff < 24 * 60 * 60 * 1000) {
+    return {
+      timeLeftStr: `${formatDuration(diff)} remaining`,
+      colorClasses: 'bg-rose-50 text-rose-700 border-rose-200',
+      timerColor: 'pink',
+      isOverdue: false,
+      isComplete: false,
+    }
+  }
+
+  // < 3 days
+  if (diff < 3 * 24 * 60 * 60 * 1000) {
+    return {
+      timeLeftStr: `${formatDuration(diff)} remaining`,
+      colorClasses: 'bg-amber-50 text-amber-700 border-amber-200',
+      timerColor: 'amber',
+      isOverdue: false,
+      isComplete: false,
+    }
+  }
+
+  // Safe (> 3 days)
+  return {
+    timeLeftStr: `${formatDuration(diff)} remaining`,
+    colorClasses: 'bg-green-50 text-green-700 border-green-200',
+    timerColor: 'green',
+    isOverdue: false,
+    isComplete: false,
+  }
+}
+
 export default function CalendarPage() {
   const user = useAuthStore((s) => s.user)
+  const router = useRouter()
   const [events, setEvents] = useState<Event[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [contents, setContents] = useState<Content[]>([])
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [cursor, setCursor] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string>(todayISO())
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Event | null>(null)
   const [form, setForm] = useState<EventForm>(EMPTY())
   const [saving, setSaving] = useState(false)
+
+  const [now, setNow] = useState(new Date())
+  const [typeFilter, setTypeFilter] = useState('ALL')
+  const [projectFilter, setProjectFilter] = useState('ALL')
+
+  // Live countdown ticker updating every 30s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date())
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   const monthStart = useMemo(() => {
     const d = new Date(cursor)
@@ -77,21 +255,41 @@ export default function CalendarPage() {
 
   const fetchEvents = useCallback(async () => {
     setLoading(true)
-    const params = new URLSearchParams({
-      from: monthStart.toISOString(),
-      to: monthEnd.toISOString(),
-    })
-    const res = await fetch(`/api/events?${params}`)
-    const json = await res.json()
-    setEvents(json.data ?? [])
-    setLoading(false)
+    try {
+      const params = new URLSearchParams({
+        from: monthStart.toISOString(),
+        to: monthEnd.toISOString(),
+      })
+      const [eventsRes, tasksRes, contentRes] = await Promise.all([
+        fetch(`/api/events?${params}`),
+        fetch(`/api/tasks`),
+        fetch(`/api/content`),
+      ])
+      const [eventsJson, tasksJson, contentJson] = await Promise.all([
+        eventsRes.json(),
+        tasksRes.json(),
+        contentRes.json(),
+      ])
+      setEvents(eventsJson.data ?? [])
+      setTasks(tasksJson.data ?? [])
+      setContents(contentJson.data ?? [])
+    } catch (err) {
+      console.error('[calendar] error fetching calendar data:', err)
+      toast.error('Failed to load calendar events')
+    } finally {
+      setLoading(false)
+    }
   }, [monthStart, monthEnd])
 
-  useEffect(() => { fetchEvents() }, [fetchEvents])
+  useEffect(() => {
+    fetchEvents()
+  }, [fetchEvents])
 
   useEffect(() => {
     if (user?.role !== 'CLIENT') {
-      fetch('/api/projects').then(r => r.json()).then(j => setProjects(j.data ?? []))
+      fetch('/api/projects')
+        .then((r) => r.json())
+        .then((j) => setProjects(j.data ?? []))
     }
   }, [user])
 
@@ -106,21 +304,131 @@ export default function CalendarPage() {
     })
   }, [monthStart])
 
-  const eventsByDay = useMemo(() => {
-    const map = new Map<string, Event[]>()
+  // Map and filter all items into a unified calendar items structure
+  const calendarItems = useMemo(() => {
+    const items: CalendarItem[] = []
+
+    // 1. Add normal events
     for (const e of events) {
-      const key = new Date(e.startTime).toISOString().split('T')[0]
+      items.push({
+        id: `event-${e.id}`,
+        title: e.title,
+        rawTitle: e.title,
+        description: e.description ?? null,
+        startTime: e.startTime,
+        endTime: e.endTime,
+        calendarType: 'event',
+        eventType: e.type,
+        assigneeName: e.owner?.name ?? null,
+        projectName: e.project?.name ?? null,
+        projectId: e.projectId ?? null,
+        originalItem: e,
+      })
+    }
+
+    // Determine limits for tasks & content (e.g. within 2 months of current month view)
+    const minTime = monthStart.getTime() - 15 * 24 * 60 * 60 * 1000
+    const maxTime = monthEnd.getTime() + 15 * 24 * 60 * 60 * 1000
+
+    // 2. Add tasks
+    for (const t of tasks) {
+      if (!t.deadline) continue
+      const dTime = new Date(t.deadline).getTime()
+      if (dTime < minTime || dTime > maxTime) continue
+
+      const assigneeName = t.assignedTo?.name
+      items.push({
+        id: `task-${t.id}`,
+        title: `📋 Task: ${t.title}${assigneeName ? ` (${assigneeName})` : ''}`,
+        rawTitle: t.title,
+        description: t.description ?? null,
+        startTime: t.deadline,
+        endTime: t.deadline,
+        calendarType: 'task',
+        assigneeName: assigneeName ?? null,
+        projectName: t.project?.name ?? null,
+        projectId: t.projectId ?? null,
+        status: t.status,
+        priority: t.priority,
+        originalItem: t,
+      })
+    }
+
+    // 3. Add content posts and editor deadlines
+    for (const c of contents) {
+      if (!c.postDate) continue
+      const postTime = new Date(c.postDate).getTime()
+      const editTime = postTime - 2 * 24 * 60 * 60 * 1000
+      const assigneeName = c.assignee?.name
+
+      // The content post itself
+      if (postTime >= minTime && postTime <= maxTime) {
+        items.push({
+          id: `post-${c.id}`,
+          title: `🚀 Post: ${c.title}${assigneeName ? ` (${assigneeName})` : ''}`,
+          rawTitle: c.title,
+          description: c.description ?? null,
+          startTime: c.postDate,
+          endTime: c.postDate,
+          calendarType: 'content_post',
+          assigneeName: assigneeName ?? null,
+          projectName: c.project?.name ?? null,
+          projectId: c.projectId ?? null,
+          status: c.status,
+          driveLink: c.driveLink ?? null,
+          originalItem: c,
+        })
+      }
+
+      // The editor deadline (exactly 2 days before)
+      if (editTime >= minTime && editTime <= maxTime) {
+        items.push({
+          id: `edit-${c.id}`,
+          title: `✂️ Edit: ${c.title}${assigneeName ? ` (${assigneeName})` : ''}`,
+          rawTitle: c.title,
+          description: c.description ?? null,
+          startTime: new Date(editTime).toISOString(),
+          endTime: new Date(editTime).toISOString(),
+          calendarType: 'content_edit',
+          assigneeName: assigneeName ?? null,
+          projectName: c.project?.name ?? null,
+          projectId: c.projectId ?? null,
+          status: c.status,
+          driveLink: c.driveLink ?? null,
+          originalItem: c,
+        })
+      }
+    }
+
+    // Apply filtering
+    return items.filter((item) => {
+      // Project filter
+      if (projectFilter !== 'ALL' && item.projectId !== projectFilter) {
+        return false
+      }
+
+      // Type filter
+      if (typeFilter !== 'ALL') {
+        if (typeFilter === 'TASK' && item.calendarType !== 'task') return false
+        if (typeFilter === 'CONTENT_POST' && item.calendarType !== 'content_post') return false
+        if (typeFilter === 'CONTENT_EDIT' && item.calendarType !== 'content_edit') return false
+        if (item.calendarType === 'event' && item.eventType !== typeFilter) return false
+      }
+
+      return true
+    })
+  }, [events, tasks, contents, monthStart, monthEnd, typeFilter, projectFilter])
+
+  // Group items by local YYYY-MM-DD key
+  const itemsByDay = useMemo(() => {
+    const map = new Map<string, CalendarItem[]>()
+    for (const item of calendarItems) {
+      const key = toLocalYYYYMMDD(item.startTime)
       if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(e)
+      map.get(key)!.push(item)
     }
     return map
-  }, [events])
-
-  const selectedDayEvents = useMemo(() => {
-    return (eventsByDay.get(selectedDate) ?? []).sort((a, b) =>
-      new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-    )
-  }, [eventsByDay, selectedDate])
+  }, [calendarItems])
 
   const openCreate = (forDate?: string) => {
     setEditing(null)
@@ -128,7 +436,8 @@ export default function CalendarPage() {
     setModalOpen(true)
   }
 
-  const openEdit = (e: Event) => {
+  const openEdit = (item: CalendarItem) => {
+    const e = item.originalItem
     const start = new Date(e.startTime)
     const end = new Date(e.endTime)
     setEditing(e)
@@ -197,32 +506,62 @@ export default function CalendarPage() {
     if (res.ok) {
       toast.success('Deleted')
       setEvents((p) => p.filter((e) => e.id !== id))
-      setSelectedEvent(null)
+      setSelectedItem(null)
     }
   }
 
   const monthLabel = cursor.toLocaleString('en-IN', { month: 'long', year: 'numeric' })
   const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const isCurrentMonth = (d: Date) => d.getMonth() === cursor.getMonth()
-  const isToday = (d: Date) => d.toISOString().split('T')[0] === todayISO()
-  const isSelected = (d: Date) => d.toISOString().split('T')[0] === selectedDate
+  const isToday = (d: Date) => toLocalYYYYMMDD(d) === todayISO()
+  const isSelected = (d: Date) => toLocalYYYYMMDD(d) === selectedDate
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <TopBar
         title="Calendar"
         actions={
-          user?.role !== 'CLIENT' && (
-            <Button size="sm" onClick={() => openCreate()}>
-              <Plus size={13} /> New event
-            </Button>
-          )
+          <div className="flex items-center gap-2">
+            <Select
+              options={[
+                { value: 'ALL', label: 'All Types' },
+                { value: 'MEETING', label: 'Meetings' },
+                { value: 'SHOOT', label: 'Shoots' },
+                { value: 'DEADLINE', label: 'Deadlines' },
+                { value: 'REVIEW', label: 'Reviews' },
+                { value: 'CALL', label: 'Calls' },
+                { value: 'TASK', label: 'Tasks' },
+                { value: 'CONTENT_POST', label: 'Content Posts' },
+                { value: 'CONTENT_EDIT', label: 'Content Edits' },
+                { value: 'OTHER', label: 'Other' },
+              ]}
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="w-32 text-xs py-1 h-8"
+            />
+            {projects.length > 0 && (
+              <Select
+                options={[
+                  { value: 'ALL', label: 'All Projects' },
+                  ...projects.map((p) => ({ value: p.id, label: p.name })),
+                ]}
+                value={projectFilter}
+                onChange={(e) => setProjectFilter(e.target.value)}
+                className="w-36 text-xs py-1 h-8"
+              />
+            )}
+            {user?.role !== 'CLIENT' && (
+              <Button size="sm" className="h-8 px-2 text-xs" onClick={() => openCreate()}>
+                <Plus size={12} className="mr-0.5" /> New event
+              </Button>
+            )}
+          </div>
         }
       />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Calendar grid */}
-        <div className={cn('flex flex-col p-5 overflow-hidden transition-all', selectedEvent ? 'flex-1' : 'flex-1')}>
+        <div className="flex flex-col p-5 overflow-hidden flex-1">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-semibold text-stone-900">{monthLabel}</h2>
             <div className="flex items-center gap-1">
@@ -234,7 +573,9 @@ export default function CalendarPage() {
               </button>
               <button
                 onClick={() => {
-                  const d = new Date(cursor); d.setMonth(d.getMonth() - 1); setCursor(d)
+                  const d = new Date(cursor)
+                  d.setMonth(d.getMonth() - 1)
+                  setCursor(d)
                 }}
                 className="p-1.5 rounded-md hover:bg-stone-100 text-stone-500"
               >
@@ -242,7 +583,9 @@ export default function CalendarPage() {
               </button>
               <button
                 onClick={() => {
-                  const d = new Date(cursor); d.setMonth(d.getMonth() + 1); setCursor(d)
+                  const d = new Date(cursor)
+                  d.setMonth(d.getMonth() + 1)
+                  setCursor(d)
                 }}
                 className="p-1.5 rounded-md hover:bg-stone-100 text-stone-500"
               >
@@ -253,46 +596,62 @@ export default function CalendarPage() {
 
           <div className="grid grid-cols-7 gap-px bg-stone-200 border border-stone-200 rounded-lg overflow-hidden flex-1">
             {dayLabels.map((d) => (
-              <div key={d} className="bg-stone-50 text-[10px] font-semibold text-stone-500 uppercase tracking-wider px-2 py-1.5 text-center">
+              <div
+                key={d}
+                className="bg-stone-50 text-[10px] font-semibold text-stone-500 uppercase tracking-wider px-2 py-1.5 text-center"
+              >
                 {d}
               </div>
             ))}
             {days.map((d) => {
-              const key = d.toISOString().split('T')[0]
-              const dayEvents = eventsByDay.get(key) ?? []
+              const key = toLocalYYYYMMDD(d)
+              const dayItems = itemsByDay.get(key) ?? []
               return (
                 <button
                   key={key}
                   onClick={() => setSelectedDate(key)}
                   className={cn(
-                    'bg-white p-1.5 text-left flex flex-col gap-1 min-h-[70px] hover:bg-stone-50 transition-colors',
+                    'bg-white p-1.5 text-left flex flex-col gap-1 min-h-[70px] hover:bg-stone-50 transition-colors relative',
                     !isCurrentMonth(d) && 'bg-stone-50/50 text-stone-300',
-                    isSelected(d) && 'ring-2 ring-stone-900 ring-inset',
+                    isSelected(d) && 'ring-2 ring-stone-900 ring-inset'
                   )}
                 >
-                  <div className={cn(
-                    'text-[11px] font-medium w-5 h-5 rounded-full flex items-center justify-center',
-                    isToday(d) ? 'bg-stone-900 text-white' : 'text-stone-700',
-                    !isCurrentMonth(d) && !isToday(d) && 'text-stone-300',
-                  )}>
+                  <div
+                    className={cn(
+                      'text-[11px] font-medium w-5 h-5 rounded-full flex items-center justify-center',
+                      isToday(d) ? 'bg-stone-900 text-white' : 'text-stone-700',
+                      !isCurrentMonth(d) && !isToday(d) && 'text-stone-300'
+                    )}
+                  >
                     {d.getDate()}
                   </div>
-                  <div className="flex flex-col gap-0.5">
-                    {dayEvents.slice(0, 2).map((e) => (
-                      <div
-                        key={e.id}
-                        onClick={(ev) => { ev.stopPropagation(); setSelectedEvent(e) }}
-                        className={cn(
-                          'text-[9px] truncate px-1 py-0.5 rounded border cursor-pointer hover:opacity-80',
-                          eventTypeColor(e.type),
-                          selectedEvent?.id === e.id && 'ring-1 ring-stone-900'
-                        )}
-                      >
-                        {e.title}
-                      </div>
-                    ))}
-                    {dayEvents.length > 2 && (
-                      <div className="text-[9px] text-stone-400">+{dayEvents.length - 2} more</div>
+                  <div className="flex flex-col gap-0.5 w-full">
+                    {dayItems.slice(0, 2).map((item) => {
+                      const timer = item.calendarType !== 'event' ? getTimerInfo(item, now) : null
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            setSelectedItem(item)
+                          }}
+                          className={cn(
+                            'text-[9px] truncate px-1 py-0.5 rounded border cursor-pointer hover:opacity-80 flex items-center justify-between gap-1 w-full font-medium',
+                            item.calendarType === 'event' ? eventTypeColor(item.eventType!) : timer?.colorClasses,
+                            selectedItem?.id === item.id && 'ring-1 ring-stone-900'
+                          )}
+                        >
+                          <span className="truncate flex-1">{item.title}</span>
+                          {item.calendarType !== 'event' && timer && !timer.isComplete && (
+                            <span className="text-[8px] opacity-75 font-semibold shrink-0">
+                              {getTimerMiniLabel(item, now)}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {dayItems.length > 2 && (
+                      <div className="text-[9px] text-stone-400">+{dayItems.length - 2} more</div>
                     )}
                   </div>
                 </button>
@@ -301,45 +660,105 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Right panel: shown only when an event is clicked */}
-        {selectedEvent && (
+        {/* Right panel: shown only when a calendar item is clicked */}
+        {selectedItem && (
           <div className="w-80 border-l border-stone-100 bg-white flex flex-col shadow-sm">
             <div className="p-4 border-b border-stone-100 flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-stone-900 leading-snug mb-1">{selectedEvent.title}</p>
-                <span className={cn(
-                  'inline-block text-[9px] px-1.5 py-0.5 rounded border font-medium',
-                  eventTypeColor(selectedEvent.type)
-                )}>
-                  {EVENT_TYPE_LABELS[selectedEvent.type]}
+                <p className="text-sm font-semibold text-stone-900 leading-snug mb-1">{selectedItem.rawTitle}</p>
+                <span
+                  className={cn(
+                    'inline-block text-[9px] px-1.5 py-0.5 rounded border font-medium',
+                    selectedItem.calendarType === 'event'
+                      ? eventTypeColor(selectedItem.eventType!)
+                      : selectedItem.calendarType === 'task'
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : selectedItem.calendarType === 'content_post'
+                      ? 'bg-purple-50 text-purple-700 border-purple-200'
+                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                  )}
+                >
+                  {selectedItem.calendarType === 'event'
+                    ? EVENT_TYPE_LABELS[selectedItem.eventType!]
+                    : selectedItem.calendarType === 'task'
+                    ? 'Task'
+                    : selectedItem.calendarType === 'content_post'
+                    ? 'Content Post'
+                    : 'Editor Deadline'}
                 </span>
               </div>
               <button
-                onClick={() => setSelectedEvent(null)}
+                onClick={() => setSelectedItem(null)}
                 className="p-1 text-stone-300 hover:text-stone-700 flex-shrink-0"
               >
                 ✕
               </button>
             </div>
+
+            {/* Prominent urgency / countdown banner */}
+            {selectedItem.calendarType !== 'event' && (() => {
+              const timer = getTimerInfo(selectedItem, now)
+              return (
+                <div
+                  className={cn(
+                    'mx-4 mt-3 p-2.5 rounded-md border text-center font-semibold text-xs flex items-center justify-center gap-1.5',
+                    timer.colorClasses
+                  )}
+                >
+                  {!timer.isComplete && (
+                    <Clock
+                      size={13}
+                      className={cn(timer.timerColor === 'red' && 'animate-pulse')}
+                    />
+                  )}
+                  <span>{timer.timeLeftStr}</span>
+                </div>
+              )
+            })()}
+
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               <div className="text-xs text-stone-600 space-y-2">
+                {/* Time or Due Date */}
                 <div className="flex items-center gap-2">
                   <Clock size={12} className="text-stone-400" />
                   <span>
-                    {new Date(selectedEvent.startTime).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    {' · '}
-                    {formatTime(selectedEvent.startTime)}–{formatTime(selectedEvent.endTime)}
+                    {selectedItem.calendarType === 'event' ? (
+                      <>
+                        {new Date(selectedItem.startTime).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                        {' · '}
+                        {formatTime(selectedItem.startTime)}–{formatTime(selectedItem.endTime)}
+                      </>
+                    ) : (
+                      <>
+                        Due:{' '}
+                        {new Date(selectedItem.startTime).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </>
+                    )}
                   </span>
                 </div>
-                {selectedEvent.location && (
+
+                {/* Location (Standard event only) */}
+                {selectedItem.calendarType === 'event' && selectedItem.originalItem.location && (
                   <div className="flex items-center gap-2">
                     <MapPin size={12} className="text-stone-400" />
-                    <span className="truncate">{selectedEvent.location}</span>
+                    <span className="truncate">{selectedItem.originalItem.location}</span>
                   </div>
                 )}
-                {selectedEvent.meetingLink && (
+
+                {/* Meeting Link (Standard event only) */}
+                {selectedItem.calendarType === 'event' && selectedItem.originalItem.meetingLink && (
                   <a
-                    href={selectedEvent.meetingLink}
+                    href={selectedItem.originalItem.meetingLink}
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-center gap-2 text-blue-600 hover:underline"
@@ -348,38 +767,138 @@ export default function CalendarPage() {
                     <span className="truncate">Join meeting</span>
                   </a>
                 )}
-                {selectedEvent.project && (
+
+                {/* Assignee (Tasks & Content) */}
+                {selectedItem.assigneeName && (
                   <div className="flex items-center gap-2">
-                    <span className="text-stone-400 text-[11px]">Project:</span>
-                    <span className="text-stone-600 text-[11px]">{selectedEvent.project.name}</span>
+                    <span className="text-stone-400 text-[11px]">Assignee:</span>
+                    <span className="text-stone-700 font-semibold text-[11px]">{selectedItem.assigneeName}</span>
                   </div>
                 )}
+
+                {/* Project */}
+                {selectedItem.projectName && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-400 text-[11px]">Project:</span>
+                    <span className="text-stone-600 text-[11px]">{selectedItem.projectName}</span>
+                  </div>
+                )}
+
+                {/* Task Status & Priority */}
+                {selectedItem.calendarType === 'task' && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    <span
+                      className={cn(
+                        'text-[10px] px-1.5 py-0.5 rounded border font-medium',
+                        taskStatusColor(selectedItem.status as TaskStatus)
+                      )}
+                    >
+                      {TASK_STATUS_LABELS[selectedItem.status as TaskStatus]}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-[10px] px-1.5 py-0.5 rounded border font-medium',
+                        taskPriorityColor(selectedItem.priority as TaskPriority)
+                      )}
+                    >
+                      {TASK_PRIORITY_LABELS[selectedItem.priority as TaskPriority]}
+                    </span>
+                  </div>
+                )}
+
+                {/* Content Status & Type */}
+                {(selectedItem.calendarType === 'content_post' || selectedItem.calendarType === 'content_edit') && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    <span
+                      className={cn(
+                        'text-[10px] px-1.5 py-0.5 rounded border font-medium',
+                        contentStatusColor(selectedItem.status as ContentStatus)
+                      )}
+                    >
+                      {CONTENT_STATUS_LABELS[selectedItem.status as ContentStatus]}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-stone-200 bg-stone-50 text-stone-600 font-medium">
+                      {selectedItem.originalItem.type}
+                    </span>
+                  </div>
+                )}
+
+                {/* Drive Link (Content only) */}
+                {(selectedItem.calendarType === 'content_post' || selectedItem.calendarType === 'content_edit') &&
+                  selectedItem.driveLink && (
+                    <div className="pt-1">
+                      <a
+                        href={selectedItem.driveLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 bg-blue-50/50 hover:bg-blue-50 border border-blue-100 rounded-md py-1.5 px-3 transition-colors w-full"
+                      >
+                        <ExternalLink size={12} />
+                        <span className="truncate">Open Assets (Drive)</span>
+                      </a>
+                    </div>
+                  )}
               </div>
-              {selectedEvent.description && (
+
+              {/* Description/Notes */}
+              {selectedItem.description && (
                 <div>
                   <p className="text-[10px] uppercase tracking-wide text-stone-400 font-medium mb-1">Notes</p>
-                  <p className="text-xs text-stone-600 leading-relaxed bg-stone-50 rounded-md p-3">
-                    {selectedEvent.description}
+                  <p className="text-xs text-stone-600 leading-relaxed bg-stone-50 rounded-md p-3 whitespace-pre-wrap">
+                    {selectedItem.description}
                   </p>
                 </div>
               )}
+
+              {/* Quick Navigation Button for Tasks & Content */}
+              {selectedItem.calendarType === 'task' && (
+                <div className="pt-2">
+                  <Button
+                    size="sm"
+                    className="w-full flex items-center justify-center gap-1.5 text-xs h-9"
+                    onClick={() => router.push('/tasks')}
+                  >
+                    <ListTodo size={12} /> Go to Tasks
+                  </Button>
+                </div>
+              )}
+
+              {(selectedItem.calendarType === 'content_post' || selectedItem.calendarType === 'content_edit') && (
+                <div className="pt-2">
+                  <Button
+                    size="sm"
+                    className="w-full flex items-center justify-center gap-1.5 text-xs h-9"
+                    onClick={() => router.push('/content')}
+                  >
+                    <Video size={12} /> Go to Content Planner
+                  </Button>
+                </div>
+              )}
             </div>
-            {(user?.role === 'ADMIN' || user?.role === 'MANAGER' || selectedEvent.ownerId === user?.id) && (
-              <div className="p-4 border-t border-stone-100 flex items-center gap-2">
-                <button
-                  onClick={() => { openEdit(selectedEvent); setSelectedEvent(null) }}
-                  className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-md py-2 transition-colors"
-                >
-                  <Pencil size={11} /> Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(selectedEvent.id)}
-                  className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md py-2 transition-colors"
-                >
-                  <Trash2 size={11} /> Delete
-                </button>
-              </div>
-            )}
+
+            {/* Standard Event editing/deleting */}
+            {selectedItem.calendarType === 'event' &&
+              (user?.role === 'ADMIN' ||
+                user?.role === 'MANAGER' ||
+                selectedItem.originalItem.ownerId === user?.id) && (
+                <div className="p-4 border-t border-stone-100 flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      openEdit(selectedItem)
+                      setSelectedItem(null)
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-md py-2 transition-colors"
+                  >
+                    <Pencil size={11} /> Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(selectedItem.originalItem.id)}
+                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-md py-2 transition-colors"
+                  >
+                    <Trash2 size={11} /> Delete
+                  </button>
+                </div>
+              )}
           </div>
         )}
       </div>
@@ -464,7 +983,12 @@ export default function CalendarPage() {
             </div>
           )}
           <div className="col-span-2 flex gap-2 pt-1">
-            <Button variant="secondary" size="sm" className="flex-1" onClick={() => setModalOpen(false)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="flex-1"
+              onClick={() => setModalOpen(false)}
+            >
               Cancel
             </Button>
             <Button size="sm" className="flex-1" loading={saving} onClick={handleSave}>

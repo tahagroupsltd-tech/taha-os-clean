@@ -126,26 +126,28 @@ export default async function SettingsPage() {
                 All Users ({allUsers.length})
               </h2>
             </div>
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-stone-50 bg-stone-50">
-                  <th className="text-left px-5 py-2.5 font-medium text-stone-400 uppercase tracking-wide">Name</th>
-                  <th className="text-left px-5 py-2.5 font-medium text-stone-400 uppercase tracking-wide">Username</th>
-                  <th className="text-left px-5 py-2.5 font-medium text-stone-400 uppercase tracking-wide">Role</th>
-                  <th className="text-left px-5 py-2.5 font-medium text-stone-400 uppercase tracking-wide">Joined</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-50">
-                {allUsers.map((u: any) => (
-                  <tr key={u.id}>
-                    <td className="px-5 py-3 font-medium text-stone-900">{u.name}</td>
-                    <td className="px-5 py-3 text-stone-500 font-mono">{u.username}</td>
-                    <td className="px-5 py-3 text-stone-500">{ROLE_LABEL[u.role as Role]}</td>
-                    <td className="px-5 py-3 text-stone-400">{formatDate(u.createdAt)}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-stone-50 bg-stone-50/40">
+                    <th className="text-left px-5 py-2.5 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Name</th>
+                    <th className="text-left px-5 py-2.5 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Username</th>
+                    <th className="text-left px-5 py-2.5 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Role</th>
+                    <th className="text-left px-5 py-2.5 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Joined</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-stone-50">
+                  {allUsers.map((u: any) => (
+                    <tr key={u.id}>
+                      <td className="px-5 py-3 font-medium text-stone-900 whitespace-nowrap">{u.name}</td>
+                      <td className="px-5 py-3 text-stone-500 font-mono whitespace-nowrap">{u.username}</td>
+                      <td className="px-5 py-3 text-stone-500 whitespace-nowrap">{ROLE_LABEL[u.role as Role]}</td>
+                      <td className="px-5 py-3 text-stone-400 whitespace-nowrap">{formatDate(u.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

@@ -706,16 +706,33 @@ export default function ProjectsPage() {
             <p className="text-sm text-stone-700">
               Delete <span className="font-semibold">{delTarget.name}</span>?
             </p>
-            {delTarget._count && (delTarget._count.tasks > 0 || delTarget._count.content > 0) && (
+            {delTarget._count && (
+              (delTarget._count.tasks ?? 0) > 0 ||
+              (delTarget._count.content ?? 0) > 0 ||
+              (delTarget._count.transactions ?? 0) > 0 ||
+              (delTarget._count.events ?? 0) > 0 ||
+              (delTarget._count.notes ?? 0) > 0
+            ) && (
               <div className="rounded-md bg-amber-50 border border-amber-100 px-3 py-2.5">
-                <p className="text-[11px] text-amber-700 leading-relaxed">
-                  This project has {delTarget._count.tasks} task(s) and {delTarget._count.content} content item(s). Check below to detach them and delete anyway.
+                <p className="text-[11px] text-amber-700 leading-relaxed font-semibold">
+                  This project has linked records:
                 </p>
-                <label className="flex items-center gap-2 mt-2 text-xs text-amber-900">
+                <ul className="list-disc list-inside text-[11px] text-amber-700 mt-1 space-y-0.5 ml-1">
+                  {(delTarget._count.tasks ?? 0) > 0 && <li>{delTarget._count.tasks} task(s)</li>}
+                  {(delTarget._count.content ?? 0) > 0 && <li>{delTarget._count.content} content item(s)</li>}
+                  {(delTarget._count.transactions ?? 0) > 0 && <li>{delTarget._count.transactions} transaction(s)</li>}
+                  {(delTarget._count.events ?? 0) > 0 && <li>{delTarget._count.events} calendar event(s)</li>}
+                  {(delTarget._count.notes ?? 0) > 0 && <li>{delTarget._count.notes} note(s)</li>}
+                </ul>
+                <p className="text-[11px] text-amber-700 leading-relaxed mt-2">
+                  Check below to detach them and delete the project anyway.
+                </p>
+                <label className="flex items-center gap-2 mt-2 text-xs text-amber-900 font-medium cursor-pointer">
                   <input
                     type="checkbox"
                     checked={delForce}
                     onChange={(e) => setDelForce(e.target.checked)}
+                    className="rounded border-amber-300 text-amber-600 focus:ring-amber-500"
                   />
                   Detach linked records and delete anyway
                 </label>
@@ -755,56 +772,6 @@ function ProjectCard({
           className="text-sm font-semibold text-stone-900 leading-snug hover:text-stone-700 hover:underline"
         >
           {project.name}
-        </Link>
-        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          <Badge className={projectStatusColor(project.status)}>
-            {PROJECT_STATUS_LABELS[project.status]}
-          </Badge>
-          {project.sopLevel != null && (
-            <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded', SOP_COLORS[project.sopLevel])}>
-              L{project.sopLevel}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {project.client && (
-        <p className="text-xs text-stone-500 mb-2">Client: {project.client.name}</p>
-      )}
-
-      {project.description && (
-        <p className="text-xs text-stone-400 mb-3 leading-relaxed line-clamp-2">{project.description}</p>
-      )}
-
-      <div className="flex items-center gap-3 pt-2 border-t border-stone-50 mt-auto">
-        {project._count && (
-          <>
-            <div className="flex items-center gap-1.5 text-[11px] text-stone-400">
-              <CheckSquare size={12} />
-              <span>{project._count.tasks}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-stone-400">
-              <FileVideo size={12} />
-              <span>{project._count.content}</span>
-            </div>
-          </>
-        )}
-        {project.sopLevel != null && (
-          <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', SOP_COLORS[project.sopLevel])}>
-            {SOP_LEVELS.find(s => s.value === String(project.sopLevel))?.label ?? `L${project.sopLevel}`}
-          </span>
-        )}
-        {project.dueDate && (
-          <span className="ml-auto text-[11px] text-stone-400">Due {formatDate(project.dueDate)}</span>
-        )}
-      </div>
-
-      <div className="flex items-center gap-1 mt-3 pt-2 border-t border-stone-50">
-        <Link
-          href={`/projects/${project.id}`}
-          className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium text-stone-600 hover:text-stone-900 py-1.5 rounded hover:bg-stone-50"
-        >
-          Open <ArrowRight size={11} />
         </Link>
         {isAdmin && (
           <>

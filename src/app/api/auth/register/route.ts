@@ -13,9 +13,8 @@ export async function POST(req: NextRequest) {
     if (!requestingUser || !canCreateUsers(requestingUser.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-
     const body = await req.json()
-    const { username, name, phone, password, role } = body
+    const { username, name, phone, email, password, role } = body
 
     if (!username || !name || !password || !role) {
       return NextResponse.json(
@@ -30,17 +29,20 @@ export async function POST(req: NextRequest) {
 
     // Check uniqueness
     const existing = await sbSelect('users', {
-      select: 'id,username,phone',
+      select: 'id,username,phone,email',
       filters: {},
     })
     const cleanUsername = username.toLowerCase().trim()
     const cleanPhone = phone?.trim() || null
+    const cleanEmail = email?.trim() || null
 
     const conflict = existing.find((u: any) =>
-      u.username === cleanUsername || (cleanPhone && u.phone === cleanPhone)
+      u.username === cleanUsername || 
+      (cleanPhone && u.phone === cleanPhone) ||
+      (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail.toLowerCase())
     )
     if (conflict) {
-      return NextResponse.json({ error: 'Username or phone already in use' }, { status: 409 })
+      return NextResponse.json({ error: 'Username, phone or email already in use' }, { status: 409 })
     }
 
     const hashed = await bcrypt.hash(password, 10)
@@ -50,6 +52,7 @@ export async function POST(req: NextRequest) {
       username: cleanUsername,
       name: name.trim(),
       phone: cleanPhone,
+      email: cleanEmail,
       password: hashed,
       role,
       isActive: true,
@@ -64,12 +67,12 @@ export async function POST(req: NextRequest) {
         name: user.name,
         role: user.role,
         phone: user.phone,
+        email: user.email,
         isActive: user.isActive,
-        createdAt: user.createdAt,
       },
-    }, { status: 201 })
-  } catch (err) {
-    console.error('[REGISTER]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    })
+  } catch (err: any) {
+    console.error('[register] error:', err)
+    return NextResponse.json({ error: err?.message ?? 'Internal error' }, { status: 500 })
   }
 }

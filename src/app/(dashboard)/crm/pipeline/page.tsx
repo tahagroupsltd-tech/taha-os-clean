@@ -119,24 +119,24 @@ export default function PipelinePage() {
       <TopBar title="CRM Pipeline" />
 
       {/* Header strip */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-stone-100 bg-white flex-shrink-0">
-        <div className="flex items-center gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-stone-100 bg-white flex-shrink-0 w-full">
+        <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-stone-400 font-medium">Won Revenue</p>
-            <p className="text-base font-bold text-green-700">{formatMoney(totalValue)}</p>
+            <p className="text-sm sm:text-base font-bold text-green-700">{formatMoney(totalValue)}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-stone-400 font-medium">Pipeline Value</p>
-            <p className="text-base font-bold text-stone-900">{formatMoney(pipelineValue)}</p>
+            <p className="text-sm sm:text-base font-bold text-stone-900">{formatMoney(pipelineValue)}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-wide text-stone-400 font-medium">Total Leads</p>
-            <p className="text-base font-bold text-stone-900">{leads.length}</p>
+            <p className="text-sm sm:text-base font-bold text-stone-900">{leads.length}</p>
           </div>
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 text-white text-xs font-medium rounded-md hover:bg-stone-700 transition-colors"
+          className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-1.5 bg-stone-900 text-white text-xs font-medium rounded-md hover:bg-stone-700 transition-colors whitespace-nowrap"
         >
           <Plus size={13} />
           Add Lead

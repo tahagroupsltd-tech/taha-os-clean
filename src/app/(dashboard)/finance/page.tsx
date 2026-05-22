@@ -13,7 +13,7 @@ import {
   formatMoney, formatDate, cn,
 } from '@/lib/utils'
 import type { Transaction, TransactionType, TransactionCategory } from '@/types'
-import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw } from 'lucide-react'
+import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw, FileText, ExternalLink, CheckCircle2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const TYPE_OPTIONS = Object.entries(TRANSACTION_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))
@@ -57,6 +57,7 @@ export default function FinancePage() {
   } | null>(null)
   const [lastSynced, setLastSynced] = useState<Date | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [activeTab, setActiveTab] = useState<'transactions' | 'invoices'>('transactions')
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState<string>('')
@@ -65,22 +66,7 @@ export default function FinancePage() {
   const [form, setForm] = useState<TxForm>(EMPTY)
   const [saving, setSaving] = useState(false)
 
-  // Block non-founder access at the page level too (not just at the API)
-  if (user && !isFounder) {
-    return (
-      <div className="flex flex-col h-full overflow-hidden">
-        <TopBar title="Finance" />
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-          <Wallet size={32} className="text-stone-300 mb-3" />
-          <p className="text-sm font-semibold text-stone-700 mb-1">Restricted</p>
-          <p className="text-xs text-stone-500 max-w-sm">
-            Finance is visible only to the founder. Reach out to admin for revenue, expense,
-            or invoicing data.
-          </p>
-        </div>
-      </div>
-    )
-  }
+
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true)
@@ -189,26 +175,70 @@ export default function FinancePage() {
     }
   }
 
+  // Block non-founder access at the page level too (not just at the API)
+  if (user && !isFounder) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <TopBar title="Finance" />
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <Wallet size={32} className="text-stone-300 mb-3" />
+          <p className="text-sm font-semibold text-stone-700 mb-1">Restricted</p>
+          <p className="text-xs text-stone-500 max-w-sm">
+            Finance is visible only to the founder. Reach out to admin for revenue, expense,
+            or invoicing data.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <TopBar
         title="Finance"
         actions={
           <div className="flex items-center gap-2">
-            <Select
-              options={[{ value: '', label: 'All' }, ...TYPE_OPTIONS]}
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="h-8 text-xs w-24"
-            />
-            <Button size="sm" onClick={openCreate}>
-              <Plus size={13} /> New
-            </Button>
+            {activeTab === 'transactions' && (
+              <>
+                <Select
+                  options={[{ value: '', label: 'All' }, ...TYPE_OPTIONS]}
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="h-8 text-xs w-24"
+                />
+                <Button size="sm" onClick={openCreate}>
+                  <Plus size={13} /> New
+                </Button>
+              </>
+            )}
+            {activeTab === 'invoices' && (
+              <Button size="sm" onClick={() => router.push('/invoices/new')}>
+                <Plus size={13} /> New invoice
+              </Button>
+            )}
           </div>
         }
       />
 
+      {/* Tab bar */}
+      <div className="flex border-b border-stone-100 bg-white px-5 gap-4 flex-shrink-0">
+        {(['transactions', 'invoices'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setActiveTab(t)}
+            className={`py-2.5 text-xs font-semibold capitalize border-b-2 transition-colors ${
+              activeTab === t
+                ? 'border-stone-900 text-stone-900'
+                : 'border-transparent text-stone-400 hover:text-stone-700'
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        {activeTab === 'transactions' && (<>
         {/* Live sync strip */}
         {liveSummary && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -327,7 +357,7 @@ export default function FinancePage() {
             </div>
           )}
         </div>
-      </div>
+
 
       <Modal
         open={modalOpen}
@@ -404,7 +434,12 @@ export default function FinancePage() {
           </div>
         </div>
       </Modal>
+        </>)}
+        {activeTab === 'invoices' && (
+          <InvoicesTab />
+        )}
     </div>
+  </div>
   )
 }
 
@@ -433,3 +468,405 @@ function SummaryCard({
     </div>
   )
 }
+
+// ─── Invoices Tab ─────────────────────────────────────────────────────────────
+const STATUS_COLORS: Record<string, string> = {
+  DRAFT: 'bg-stone-100 text-stone-600',
+  SENT: 'bg-blue-100 text-blue-700',
+  PAID: 'bg-green-100 text-green-700',
+  CANCELLED: 'bg-red-100 text-red-700',
+}
+
+interface InvoiceRow {
+  id: string
+  invoice_number: string
+  status: string
+  total: number
+  due_date: string | null
+  created_at: string
+  client: { name: string } | null
+  project: { name: string } | null
+}
+
+interface NewInvoiceForm {
+  clientId: string
+  projectId: string
+  taxRate: string
+  dueDate: string
+  notes: string
+  lineItems: { description: string; qty: string; rate: string }[]
+}
+
+interface NewQuotForm {
+  clientId: string
+  projectId: string
+  clientLocation: string
+  scopeOfWork: string
+  importantDetails: string
+  notes: string
+  taxRate: string
+  services: { name: string; detail: string; amount: string }[]
+}
+
+const EMPTY_QUOT: NewQuotForm = {
+  clientId: '', projectId: '', clientLocation: '', scopeOfWork: '',
+  importantDetails: 'Services include end-to-end content creation – scripting, shooting, editing & posting.',
+  notes: '', taxRate: '0',
+  services: [{ name: '', detail: '', amount: '' }],
+}
+
+function InvoicesTab() {
+  const router = useRouter()
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [showQuotModal, setShowQuotModal] = useState(false)
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([])
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState<NewInvoiceForm>({
+    clientId: '', projectId: '', taxRate: '18', dueDate: '', notes: '',
+    lineItems: [{ description: '', qty: '1', rate: '' }],
+  })
+  const [quotForm, setQuotForm] = useState<NewQuotForm>(EMPTY_QUOT)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const r = await fetch('/api/invoices').then(r => r.json())
+    setInvoices(r.data ?? [])
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    load()
+    Promise.all([
+      fetch('/api/users').then(r => r.json()),
+      fetch('/api/projects').then(r => r.json()),
+    ]).then(([u, p]) => {
+      setClients((u.data ?? []).filter((x: any) => x.role === 'CLIENT'))
+      setProjects(p.data ?? [])
+    })
+  }, [load])
+
+  const addLine = () => setForm(f => ({ ...f, lineItems: [...f.lineItems, { description: '', qty: '1', rate: '' }] }))
+  const removeLine = (i: number) => setForm(f => ({ ...f, lineItems: f.lineItems.filter((_, j) => j !== i) }))
+  const setLine = (i: number, k: string, v: string) =>
+    setForm(f => ({ ...f, lineItems: f.lineItems.map((l, j) => j === i ? { ...l, [k]: v } : l) }))
+
+  const addService = () => setQuotForm(f => ({ ...f, services: [...f.services, { name: '', detail: '', amount: '' }] }))
+  const removeService = (i: number) => setQuotForm(f => ({ ...f, services: f.services.filter((_, j) => j !== i) }))
+  const setService = (i: number, k: string, v: string) =>
+    setQuotForm(f => ({ ...f, services: f.services.map((s, j) => j === i ? { ...s, [k]: v } : s) }))
+
+  const subtotal = form.lineItems.reduce((s, l) => s + (parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0), 0)
+  const tax = subtotal * ((parseFloat(form.taxRate) || 0) / 100)
+
+  const quotSubtotal = quotForm.services.reduce((s, sv) => s + (parseFloat(sv.amount) || 0), 0)
+  const quotTax = quotSubtotal * ((parseFloat(quotForm.taxRate) || 0) / 100)
+
+  const create = async () => {
+    if (!form.lineItems.some(l => l.description.trim() && parseFloat(l.rate) > 0)) {
+      toast.error('Add at least one line item with a description and rate'); return
+    }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'INVOICE',
+          clientId: form.clientId || null,
+          projectId: form.projectId || null,
+          taxRate: parseFloat(form.taxRate) || 0,
+          dueDate: form.dueDate || null,
+          notes: form.notes || null,
+          lineItems: form.lineItems
+            .filter(l => l.description.trim() && parseFloat(l.rate) > 0)
+            .map(l => ({ description: l.description.trim(), qty: parseFloat(l.qty) || 1, rate: parseFloat(l.rate) || 0 })),
+        }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error)
+      toast.success(`Invoice ${j.data.invoice_number} created`)
+      setShowModal(false)
+      load()
+      router.push(`/invoices/${j.data.id}`)
+    } catch (e: any) { toast.error(e.message) }
+    finally { setSaving(false) }
+  }
+
+  const createQuotation = async () => {
+    if (!quotForm.services.some(s => s.name.trim() && parseFloat(s.amount) > 0)) {
+      toast.error('Add at least one service with a name and amount'); return
+    }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'QUOTATION',
+          clientId: quotForm.clientId || null,
+          projectId: quotForm.projectId || null,
+          taxRate: parseFloat(quotForm.taxRate) || 0,
+          notes: quotForm.notes || null,
+          scopeOfWork: quotForm.scopeOfWork || null,
+          clientLocation: quotForm.clientLocation || null,
+          importantDetails: quotForm.importantDetails || null,
+          lineItems: quotForm.services
+            .filter(s => s.name.trim() && parseFloat(s.amount) > 0)
+            .map(s => ({
+              description: s.name.trim(),
+              note: s.detail.trim() || undefined,
+              qty: 1,
+              rate: parseFloat(s.amount) || 0,
+            })),
+        }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error)
+      toast.success(`Quotation ${j.data.invoice_number} created`)
+      setShowQuotModal(false)
+      setQuotForm(EMPTY_QUOT)
+      load()
+      router.push(`/invoices/${j.data.id}`)
+    } catch (e: any) { toast.error(e.message) }
+    finally { setSaving(false) }
+  }
+
+  const fmt = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
+
+  return (
+    <>
+      <div className="bg-white rounded-lg border border-stone-100 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+          <p className="text-xs font-semibold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
+            <FileText size={13} /> Invoices &amp; Quotations
+          </p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowQuotModal(true)}
+              className="inline-flex items-center gap-1 text-xs font-medium border border-stone-300 text-stone-700 px-2.5 py-1.5 rounded-md hover:bg-stone-50 transition-colors">
+              <Plus size={12} /> New quotation
+            </button>
+            <button onClick={() => setShowModal(true)}
+              className="inline-flex items-center gap-1 text-xs font-medium bg-stone-900 text-white px-2.5 py-1.5 rounded-md hover:bg-stone-700 transition-colors">
+              <Plus size={12} /> New invoice
+            </button>
+          </div>
+        </div>
+        {loading ? (
+          <div className="text-center py-10 text-xs text-stone-400">Loading…</div>
+        ) : invoices.length === 0 ? (
+          <div className="text-center py-12 text-xs text-stone-400">No documents yet — create a quotation or invoice</div>
+        ) : (
+          <div className="divide-y divide-stone-50">
+            {invoices.map((inv: any) => (
+              <div key={inv.id} className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50/50 group">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold text-stone-900">{inv.invoice_number}</p>
+                    {inv.type === 'QUOTATION' && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 uppercase tracking-wide">
+                        Quote
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${STATUS_COLORS[inv.status] ?? 'bg-stone-100 text-stone-500'}`}>
+                      {inv.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-stone-400 mt-0.5">
+                    {inv.client && <span>{inv.client.name}</span>}
+                    {inv.project && (<><span>·</span><span>{inv.project.name}</span></>)}
+                    {inv.due_date && (<><span>·</span><span>Due {formatDate(inv.due_date)}</span></>)}
+                  </div>
+                </div>
+                <p className="text-xs font-bold text-stone-900">{fmt(inv.total)}</p>
+                <button onClick={() => router.push(`/invoices/${inv.id}`)}
+                  className="opacity-0 group-hover:opacity-100 text-stone-400 hover:text-stone-700 transition-all" title="View">
+                  <ExternalLink size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── New Invoice modal ──────────────────────────────── */}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="New Invoice">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-stone-600 mb-1 block">Client</label>
+              <Select options={[{ value: '', label: 'Select client…' }, ...clients.map(c => ({ value: c.id, label: c.name }))]}
+                value={form.clientId} onChange={e => setForm(f => ({ ...f, clientId: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-stone-600 mb-1 block">Project</label>
+              <Select options={[{ value: '', label: 'Select project…' }, ...projects.map(p => ({ value: p.id, label: p.name }))]}
+                value={form.projectId} onChange={e => setForm(f => ({ ...f, projectId: e.target.value }))} />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-stone-600">Line items</label>
+              <button onClick={addLine} className="text-[11px] text-stone-500 hover:text-stone-900">+ Add row</button>
+            </div>
+            <div className="space-y-2">
+              {form.lineItems.map((l, i) => (
+                <div key={i} className="grid grid-cols-12 gap-1.5 items-center">
+                  <div className="col-span-6">
+                    <Input placeholder="Description" value={l.description}
+                      onChange={e => setLine(i, 'description', e.target.value)} />
+                  </div>
+                  <div className="col-span-2">
+                    <Input type="number" placeholder="Qty" value={l.qty}
+                      onChange={e => setLine(i, 'qty', e.target.value)} />
+                  </div>
+                  <div className="col-span-3">
+                    <Input type="number" placeholder="Rate (₹)" value={l.rate}
+                      onChange={e => setLine(i, 'rate', e.target.value)} />
+                  </div>
+                  <div className="col-span-1 flex justify-center">
+                    {form.lineItems.length > 1 && (
+                      <button onClick={() => removeLine(i)} className="text-stone-300 hover:text-red-400 text-lg leading-none">×</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-stone-600 mb-1 block">GST (%)</label>
+              <Input type="number" value={form.taxRate} onChange={e => setForm(f => ({ ...f, taxRate: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-stone-600 mb-1 block">Due date</label>
+              <Input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-stone-600 mb-1 block">Notes</label>
+            <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              rows={2} placeholder="Payment terms, bank details, etc."
+              className="w-full text-xs border border-stone-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-stone-400 resize-none" />
+          </div>
+
+          <div className="bg-stone-50 rounded-md p-3 text-xs space-y-1">
+            <div className="flex justify-between text-stone-500"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
+            {parseFloat(form.taxRate) > 0 && (
+              <div className="flex justify-between text-stone-500"><span>GST ({form.taxRate}%)</span><span>{fmt(tax)}</span></div>
+            )}
+            <div className="flex justify-between font-bold text-stone-900 pt-1 border-t border-stone-200">
+              <span>Total</span><span>{fmt(subtotal + tax)}</span>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
+            <Button onClick={create} disabled={saving}>{saving ? 'Creating…' : 'Create invoice'}</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── New Quotation modal ────────────────────────────── */}
+      <Modal open={showQuotModal} onClose={() => setShowQuotModal(false)} title="New Quotation">
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-stone-600 mb-1 block">Client</label>
+              <Select options={[{ value: '', label: 'Select client…' }, ...clients.map(c => ({ value: c.id, label: c.name }))]}
+                value={quotForm.clientId} onChange={e => setQuotForm(f => ({ ...f, clientId: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-stone-600 mb-1 block">Client location</label>
+              <Input placeholder="e.g. Tirunelveli" value={quotForm.clientLocation}
+                onChange={e => setQuotForm(f => ({ ...f, clientLocation: e.target.value }))} />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-stone-600 mb-1 block">Project (optional)</label>
+            <Select options={[{ value: '', label: 'None' }, ...projects.map(p => ({ value: p.id, label: p.name }))]}
+              value={quotForm.projectId} onChange={e => setQuotForm(f => ({ ...f, projectId: e.target.value }))} />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-stone-600 mb-1 block">Scope of Work</label>
+            <textarea value={quotForm.scopeOfWork} onChange={e => setQuotForm(f => ({ ...f, scopeOfWork: e.target.value }))}
+              rows={4}
+              placeholder={`SMM :\n12 Videos per month (scripted, captioned, with transitions, overlays, and music sync)\nPosters per month (creative design & promotional content)\nRegular Stories (brand awareness & engagement)\nMonthly Creative Strategy & Marketing Consultation`}
+              className="w-full text-xs border border-stone-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-stone-400 resize-none" />
+          </div>
+
+          {/* Services */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-stone-600">Services</label>
+              <button onClick={addService} className="text-[11px] text-stone-500 hover:text-stone-900">+ Add service</button>
+            </div>
+            <div className="space-y-2">
+              {quotForm.services.map((s, i) => (
+                <div key={i} className="grid grid-cols-12 gap-1.5 items-center">
+                  <div className="col-span-4">
+                    <Input placeholder="Service name" value={s.name}
+                      onChange={e => setService(i, 'name', e.target.value)} />
+                  </div>
+                  <div className="col-span-5">
+                    <Input placeholder="Description (optional)" value={s.detail}
+                      onChange={e => setService(i, 'detail', e.target.value)} />
+                  </div>
+                  <div className="col-span-2">
+                    <Input type="number" placeholder="₹" value={s.amount}
+                      onChange={e => setService(i, 'amount', e.target.value)} />
+                  </div>
+                  <div className="col-span-1 flex justify-center">
+                    {quotForm.services.length > 1 && (
+                      <button onClick={() => removeService(i)} className="text-stone-300 hover:text-red-400 text-lg leading-none">×</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-stone-600 mb-1 block">Important Details <span className="text-stone-400 font-normal">(one per line → bullet points)</span></label>
+            <textarea value={quotForm.importantDetails} onChange={e => setQuotForm(f => ({ ...f, importantDetails: e.target.value }))}
+              rows={3} placeholder="Services include end-to-end content creation – scripting, shooting, editing & posting."
+              className="w-full text-xs border border-stone-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-stone-400 resize-none" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-stone-600 mb-1 block">GST (%)</label>
+              <Input type="number" value={quotForm.taxRate} onChange={e => setQuotForm(f => ({ ...f, taxRate: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-stone-600 mb-1 block">Notes (optional)</label>
+              <Input placeholder="Any additional notes" value={quotForm.notes}
+                onChange={e => setQuotForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+          </div>
+
+          <div className="bg-stone-50 rounded-md p-3 text-xs space-y-1">
+            <div className="flex justify-between font-bold text-stone-900">
+              <span>Total</span><span>{fmt(quotSubtotal + quotTax)}</span>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="secondary" onClick={() => setShowQuotModal(false)}>Cancel</Button>
+            <Button onClick={createQuotation} disabled={saving}>{saving ? 'Creating…' : 'Create quotation'}</Button>
+          </div>
+        </div>
+      </Modal>
+    </>
+  )
+}
+
+

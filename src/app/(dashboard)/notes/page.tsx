@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { useAuthStore } from '@/store/auth.store'
 import { cn, formatDateTime, formatTime } from '@/lib/utils'
 import type { Note } from '@/types'
-import { Plus, Pin, PinOff, Trash2, Search, Hash, X } from 'lucide-react'
+import { Plus, Pin, PinOff, Trash2, Search, Hash, X, ArrowLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const ICON_OPTIONS = ['📝', '💡', '📌', '🎬', '📞', '🎯', '🔥', '⭐', '📅', '💰', '🎨', '🚀']
@@ -22,6 +22,7 @@ export default function NotesPage() {
   })
   const [tagInput, setTagInput] = useState('')
   const [savedAt, setSavedAt] = useState<string>('')
+  const [viewMode, setViewMode] = useState<'list' | 'editor'>('list')
 
   const fetchNotes = useCallback(async (q?: string) => {
     setLoading(true)
@@ -91,6 +92,7 @@ export default function NotesPage() {
       const j = await res.json()
       setNotes((p) => [j.data, ...p])
       setActiveId(j.data.id)
+      setViewMode('editor')
       toast.success('Note created')
     }
   }
@@ -151,7 +153,10 @@ export default function NotesPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Note list */}
-        <div className="w-72 border-r border-stone-100 bg-stone-50/30 flex flex-col">
+        <div className={cn(
+          "w-full md:w-72 border-r border-stone-100 bg-stone-50/30 flex flex-col",
+          viewMode === 'editor' ? 'hidden md:flex' : 'flex'
+        )}>
           <div className="p-3 border-b border-stone-100">
             <div className="relative">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" />
@@ -178,7 +183,7 @@ export default function NotesPage() {
               notes.map((n) => (
                 <button
                   key={n.id}
-                  onClick={() => setActiveId(n.id)}
+                  onClick={() => { setActiveId(n.id); setViewMode('editor') }}
                   className={cn(
                     'w-full text-left px-3 py-2.5 border-b border-stone-100 hover:bg-white transition-colors flex gap-2',
                     activeId === n.id && 'bg-white'
@@ -204,7 +209,10 @@ export default function NotesPage() {
         </div>
 
         {/* Editor */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className={cn(
+          "flex-1 flex flex-col overflow-hidden",
+          viewMode === 'list' ? 'hidden md:flex' : 'flex'
+        )}>
           {!activeNote ? (
             <div className="flex-1 flex items-center justify-center text-stone-400 text-sm">
               Select a note or create a new one
@@ -214,6 +222,13 @@ export default function NotesPage() {
               {/* Toolbar */}
               <div className="flex items-center justify-between px-6 py-2 border-b border-stone-100">
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className="md:hidden p-1.5 -ml-2 rounded-md hover:bg-stone-100 text-stone-500 mr-1"
+                    title="Back to list"
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
                   <select
                     value={draft.icon}
                     onChange={(e) => setDraft({ ...draft, icon: e.target.value })}
@@ -246,7 +261,7 @@ export default function NotesPage() {
               </div>
 
               {/* Editor body */}
-              <div className="flex-1 overflow-y-auto px-10 py-8">
+              <div className="flex-1 overflow-y-auto px-4 md:px-10 py-6 md:py-8">
                 <input
                   type="text"
                   placeholder="Untitled"

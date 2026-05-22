@@ -138,7 +138,7 @@ Rules:
     // Append the assistant message with its tool_calls
     messages.push({
       role: 'assistant',
-      content: msg.content,
+      content: msg.content ?? null,
       tool_calls: msg.tool_calls,
     })
 

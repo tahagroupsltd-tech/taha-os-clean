@@ -170,7 +170,7 @@ export async function sbRpc(fn: string, args: Record<string, unknown>): Promise<
 // ─── Convenience select strings ──────────────────────────────────────────────
 
 export const TASK_SELECT =
-  '*,assignedTo:users!assignedToId(id,name),createdBy:users!createdById(id,name),project:projects!projectId(id,name)'
+  '*,assignedTo:users!assignedToId(id,name,phone),createdBy:users!createdById(id,name,phone),project:projects!projectId(id,name)'
 
 export const CONTENT_SELECT =
   '*,assignee:users!assigneeId(id,name),createdBy:users!createdById(id,name),project:projects!projectId(id,name)'
@@ -183,6 +183,7 @@ export const EVENT_SELECT =
 
 export const NOTE_SELECT =
   '*,owner:users!ownerId(id,name),project:projects!projectId(id,name)'
+
 
 export const TRANSACTION_SELECT =
   '*,owner:users!ownerId(id,name),project:projects!projectId(id,name)'

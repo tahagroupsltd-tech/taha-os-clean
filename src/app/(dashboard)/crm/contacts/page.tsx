@@ -114,21 +114,23 @@ export default function ContactsPage() {
       <TopBar title="CRM — Contacts & Companies" />
 
       {/* Toolbar */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-stone-100 bg-white flex-shrink-0">
-        <div className="flex rounded-md border border-stone-200 overflow-hidden">
-          {(['contacts', 'companies'] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-1.5 text-xs font-medium transition-colors capitalize ${
-                tab === t ? 'bg-stone-900 text-white' : 'text-stone-600 hover:bg-stone-50'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-3 border-b border-stone-100 bg-white flex-shrink-0 w-full">
+        <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto">
+          <div className="flex rounded-md border border-stone-200 overflow-hidden">
+            {(['contacts', 'companies'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-4 py-1.5 text-xs font-medium transition-colors capitalize ${
+                  tab === t ? 'bg-stone-900 text-white' : 'text-stone-600 hover:bg-stone-50'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex-1 relative">
+        <div className="w-full sm:flex-1 relative">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
             value={search}
@@ -139,7 +141,7 @@ export default function ContactsPage() {
         </div>
         <button
           onClick={() => tab === 'contacts' ? setShowForm(true) : setShowCompanyForm(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 text-white text-xs font-medium rounded-md hover:bg-stone-700 transition-colors"
+          className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-1.5 bg-stone-900 text-white text-xs font-medium rounded-md hover:bg-stone-700 transition-colors whitespace-nowrap"
         >
           <Plus size={13} />
           Add {tab === 'contacts' ? 'Contact' : 'Company'}

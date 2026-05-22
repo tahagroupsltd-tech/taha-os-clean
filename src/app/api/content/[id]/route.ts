@@ -38,6 +38,23 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
+  // Auto-calculate/update the editor deadline in description if postDate or description changes
+  if (body.postDate !== undefined || body.description !== undefined) {
+    const postVal = body.postDate !== undefined ? body.postDate : before.postDate
+    if (postVal) {
+      const post = new Date(postVal)
+      const deadline = new Date(post.getTime() - 2 * 24 * 60 * 60 * 1000)
+      const deadlineStr = `Deadline: ${deadline.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} (2d before posting)`
+      const inputDesc = body.description !== undefined ? body.description : before.description
+      const cleanedDesc = inputDesc ? inputDesc.replace(/^Deadline: \d{2} \w{3} \(\d+d before posting\)\n?/, '').trim() : ''
+      patch.description = cleanedDesc ? `${deadlineStr}\n${cleanedDesc}` : deadlineStr
+    } else {
+      // If postDate is cleared, strip deadline prefix if present
+      const inputDesc = body.description !== undefined ? body.description : before.description
+      patch.description = inputDesc ? inputDesc.replace(/^Deadline: \d{2} \w{3} \(\d+d before posting\)\n?/, '').trim() : null
+    }
+  }
+
   await sbUpdate('content', { id: `eq.${params.id}` }, patch)
 
   const updated = await sbFindOne('content', {
@@ -54,6 +71,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       title: `Content reassigned to you: ${updated.title}`,
       message: `${user.name} reassigned this ${updated.type.toLowerCase()} to you${projectLabel}.`,
       link: '/content',
+      gcalEvent: updated?.postDate ? {
+        title: `✂️ Content due: ${updated.title}`,
+        description: `${user.name} assigned you this content${projectLabel}.`,
+        date: new Date(updated.postDate),
+      } : null,
     })
   }
 
@@ -100,7 +122,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const postDateChanged = body.postDate !== undefined
   const assigneeChanged = body.assigneeId !== undefined && body.assigneeId !== before.assigneeId
   if (updated?.postDate && (postDateChanged || assigneeChanged)) {
-    syncContentEvents(updated.id, {
+    await syncContentEvents(updated.id, {
       title: updated.title,
       postDate: new Date(updated.postDate),
       assigneeId: updated.assigneeId,
@@ -117,7 +139,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!canDeleteContent(user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  deleteEntityCalendarEvents('content', params.id).catch(() => {})
+  await deleteEntityCalendarEvents('content', params.id).catch(() => {})
   await sbDelete('content', { id: `eq.${params.id}` })
   return NextResponse.json({ message: 'Deleted' })
 }

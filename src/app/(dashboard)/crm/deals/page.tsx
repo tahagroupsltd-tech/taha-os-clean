@@ -97,7 +97,7 @@ export default function DealsPage() {
       <TopBar title="CRM — Deals" />
 
       {/* Stats */}
-      <div className="flex items-center gap-6 px-5 py-3 border-b border-stone-100 bg-white flex-shrink-0">
+      <div className="flex flex-wrap items-center gap-4 md:gap-6 px-5 py-3 border-b border-stone-100 bg-white flex-shrink-0">
         <div className="flex items-center gap-2">
           <TrendingUp size={14} className="text-green-600" />
           <div>
@@ -140,33 +140,34 @@ export default function DealsPage() {
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-stone-100 overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-stone-100">
-                  <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium">Deal</th>
-                  <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium">Value</th>
-                  <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium">Stage</th>
-                  <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium">Prob.</th>
-                  <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium">Close Date</th>
-                  <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium">Contact</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-50">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-stone-100 bg-stone-50/40">
+                    <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium whitespace-nowrap">Deal</th>
+                    <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium whitespace-nowrap">Value</th>
+                    <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium whitespace-nowrap">Stage</th>
+                    <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium whitespace-nowrap">Prob.</th>
+                    <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium whitespace-nowrap">Close Date</th>
+                    <th className="text-left px-4 py-3 text-[10px] uppercase tracking-wide text-stone-400 font-medium whitespace-nowrap">Contact</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-50">
                 {deals.map(deal => (
                   <tr key={deal.id} className="hover:bg-stone-50 group transition-colors">
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <p className="text-xs font-medium text-stone-900">{deal.title}</p>
                       {deal.company && <p className="text-[11px] text-stone-400 mt-0.5">{deal.company.name}</p>}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       {deal.value ? (
                         <span className="text-xs font-semibold text-stone-900">{formatMoney(Number(deal.value))}</span>
                       ) : (
                         <span className="text-xs text-stone-300">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <select
                         value={deal.stage}
                         onChange={e => updateStage(deal.id, e.target.value)}
@@ -177,7 +178,7 @@ export default function DealsPage() {
                         {DEAL_STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                       </select>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <div className="w-12 bg-stone-100 rounded-full h-1.5 overflow-hidden">
                           <div
@@ -188,7 +189,7 @@ export default function DealsPage() {
                         <span className="text-[11px] text-stone-500">{deal.probability}%</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className="text-xs text-stone-500">
                         {deal.closeDate
                           ? new Date(deal.closeDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -196,10 +197,10 @@ export default function DealsPage() {
                         }
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className="text-xs text-stone-500">{deal.contact?.name ?? '—'}</span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <button
                         onClick={() => deleteDeal(deal.id)}
                         className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-red-500 transition-all"
@@ -212,6 +213,7 @@ export default function DealsPage() {
               </tbody>
             </table>
           </div>
+        </div>
         )}
       </div>
 

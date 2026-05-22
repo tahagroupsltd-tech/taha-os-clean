@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   const user = await sbFindOne('users', {
-    select: 'id,username,name,phone,role,isActive,createdAt,updatedAt',
+    select: 'id,username,name,phone,email,role,isActive,createdAt,updatedAt',
     filters: { id: `eq.${params.id}` },
   })
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
@@ -41,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const body = await req.json().catch(() => ({}))
-  const { name, username, phone, role, isActive } = body
+  const { name, username, phone, email, role, isActive } = body
 
   if (isSelf) {
     if (role && role !== me.role) {
@@ -60,20 +60,21 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'You are not allowed to assign that role' }, { status: 403 })
   }
 
-  // Uniqueness check on username/phone
-  if (username || phone !== undefined) {
+  // Uniqueness check on username/phone/email
+  if (username || phone !== undefined || email !== undefined) {
     const all = await sbSelect('users', {
-      select: 'id,username,phone',
+      select: 'id,username,phone,email',
       filters: {},
     })
     const conflict = all.find((u: any) =>
       u.id !== params.id && (
         (username && u.username === username.toLowerCase().trim()) ||
-        (phone && u.phone === phone.trim())
+        (phone && u.phone === phone.trim()) ||
+        (email && u.email && u.email.toLowerCase() === email.trim().toLowerCase())
       )
     )
     if (conflict) {
-      return NextResponse.json({ error: 'Username or phone already in use' }, { status: 409 })
+      return NextResponse.json({ error: 'Username, phone or email already in use' }, { status: 409 })
     }
   }
 
@@ -81,6 +82,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (name !== undefined) patch.name = name.trim()
   if (username !== undefined) patch.username = username.toLowerCase().trim()
   if (phone !== undefined) patch.phone = phone === null || phone === '' ? null : phone.trim()
+  if (email !== undefined) patch.email = email === null || email === '' ? null : email.trim()
   if (role !== undefined) patch.role = role
   if (isActive !== undefined) patch.isActive = isActive
 
@@ -91,7 +93,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   await sbUpdate('users', { id: `eq.${params.id}` }, patch)
 
   const updated = await sbFindOne('users', {
-    select: 'id,username,name,phone,role,isActive,createdAt',
+    select: 'id,username,name,phone,email,role,isActive,createdAt',
     filters: { id: `eq.${params.id}` },
   })
 

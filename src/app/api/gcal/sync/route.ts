@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
 import { sbSelect, sbRpc } from '@/lib/supa'
-import { syncContentEvents, syncTaskEvent } from '@/lib/gcal'
+import { syncContentEvents, syncTaskEvent, syncOsEventToGcal, isGCalConnected } from '@/lib/gcal'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,9 +11,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // Verify the user has a connected calendar
-  // gcal_get_token returns an array; empty array = not connected
-  const tokenRows = await sbRpc('gcal_get_token', { p_user_id: user.id }).catch(() => [])
-  const hasToken = Array.isArray(tokenRows) ? tokenRows.length > 0 : !!tokenRows
+  const hasToken = await isGCalConnected(user.id)
   if (!hasToken) {
     return NextResponse.json({ error: 'Google Calendar not connected' }, { status: 400 })
   }
@@ -94,6 +92,29 @@ export async function POST(req: NextRequest) {
       synced++
     } catch (e: any) {
       errors.push(`Content "${c.title}": ${e?.message}`)
+    }
+  }
+
+  // OS Events owned by this user — upcoming events
+  const osEvents = await sbSelect('events', {
+    filters: {
+      ownerId: `eq.${user.id}`,
+      startTime: `gte.${now}`,
+    },
+  })
+
+  for (const e of osEvents) {
+    try {
+      await syncOsEventToGcal(user.id, {
+        osEventId: e.id,
+        title: e.title,
+        description: e.description ?? null,
+        startTime: e.startTime,
+        endTime: e.endTime,
+      })
+      synced++
+    } catch (err: any) {
+      errors.push(`Event "${e.title}": ${err?.message}`)
     }
   }
 

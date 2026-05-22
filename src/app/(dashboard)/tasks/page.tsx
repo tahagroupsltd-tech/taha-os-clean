@@ -1,6 +1,6 @@
 'use client'
 // src/app/(dashboard)/tasks/page.tsx
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -10,11 +10,21 @@ import { Modal } from '@/components/ui/Modal'
 import { useAuthStore } from '@/store/auth.store'
 import {
   taskStatusColor, taskPriorityColor, formatDate, isOverdue,
-  TASK_STATUS_LABELS, TASK_PRIORITY_LABELS
+  TASK_STATUS_LABELS, TASK_PRIORITY_LABELS, cn,
+  getTaskUrgencyColors
 } from '@/lib/utils'
 import type { Task, TaskStatus, TaskPriority } from '@/types'
-import { Plus, Pencil, Trash2, AlertCircle, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, AlertCircle, ChevronDown, Play, Square, Clock, Trash } from 'lucide-react'
 import toast from 'react-hot-toast'
+
+// ── Time log helpers ──────────────────────────────────────
+interface TimeLog { id: string; minutes: number; note: string | null; created_at: string; user: { id: string; name: string } }
+
+function fmtMins(m: number) {
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60), rem = m % 60
+  return rem > 0 ? `${h}h ${rem}m` : `${h}h`
+}
 
 const STATUS_COLS: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE']
 
@@ -41,6 +51,7 @@ const EMPTY_FORM: TaskFormData = {
   projectId: '',
 }
 
+
 export default function TasksPage() {
   const user = useAuthStore((s) => s.user)
   const [tasks, setTasks] = useState<Task[]>([])
@@ -49,6 +60,15 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<string>('')
   const [view, setView] = useState<'board' | 'list'>('board')
+  const [now, setNow] = useState(new Date())
+
+  // Live countdown ticker updating every 30s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date())
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false)
@@ -189,6 +209,7 @@ export default function TasksPage() {
             onDelete={handleDelete}
             onStatusChange={handleStatusChange}
             isAdmin={user?.role === 'ADMIN' || user?.role === 'MANAGER'}
+            now={now}
           />
         ) : (
           <ListView
@@ -197,6 +218,7 @@ export default function TasksPage() {
             onEdit={openEdit}
             onDelete={handleDelete}
             isAdmin={user?.role === 'ADMIN' || user?.role === 'MANAGER'}
+            now={now}
           />
         )}
       </div>
@@ -279,13 +301,14 @@ export default function TasksPage() {
 }
 
 // ── Board View ────────────────────────────────────────────
-function BoardView({ tasks, canEdit, onEdit, onDelete, onStatusChange, isAdmin }: {
+function BoardView({ tasks, canEdit, onEdit, onDelete, onStatusChange, isAdmin, now }: {
   tasks: Task[]
   canEdit: boolean
   onEdit: (t: Task) => void
   onDelete: (id: string) => void
   onStatusChange: (id: string, s: TaskStatus) => void
   isAdmin: boolean
+  now: Date
 }) {
   return (
     <div className="h-full overflow-x-auto p-5">
@@ -313,6 +336,7 @@ function BoardView({ tasks, canEdit, onEdit, onDelete, onStatusChange, isAdmin }
                     onStatusChange={onStatusChange}
                     isAdmin={isAdmin}
                     showStatusSelect
+                    now={now}
                   />
                 ))}
                 {colTasks.length === 0 && (
@@ -330,83 +354,96 @@ function BoardView({ tasks, canEdit, onEdit, onDelete, onStatusChange, isAdmin }
 }
 
 // ── List View ─────────────────────────────────────────────
-function ListView({ tasks, canEdit, onEdit, onDelete, isAdmin }: {
+function ListView({ tasks, canEdit, onEdit, onDelete, isAdmin, now }: {
   tasks: Task[]
   canEdit: boolean
   onEdit: (t: Task) => void
   onDelete: (id: string) => void
   isAdmin: boolean
+  now: Date
 }) {
   return (
-    <div className="h-full overflow-y-auto p-5">
+    <div className="h-full overflow-y-auto p-4 sm:p-5">
       <div className="bg-white rounded-lg border border-stone-100 overflow-hidden">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-stone-100 bg-stone-50">
-              <th className="text-left px-4 py-2.5 font-medium text-stone-500 uppercase tracking-wide">Title</th>
-              <th className="text-left px-4 py-2.5 font-medium text-stone-500 uppercase tracking-wide">Status</th>
-              <th className="text-left px-4 py-2.5 font-medium text-stone-500 uppercase tracking-wide">Priority</th>
-              <th className="text-left px-4 py-2.5 font-medium text-stone-500 uppercase tracking-wide">Assignee</th>
-              <th className="text-left px-4 py-2.5 font-medium text-stone-500 uppercase tracking-wide">Deadline</th>
-              {canEdit && <th className="px-4 py-2.5" />}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-50">
-            {tasks.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-8 text-stone-400">No tasks found</td></tr>
-            )}
-            {tasks.map((task) => (
-              <tr key={task.id} className="table-row-hover">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-stone-900">{task.title}</span>
-                    {isOverdue(task.deadline) && task.status !== 'DONE' && (
-                      <AlertCircle size={11} className="text-red-400" />
-                    )}
-                  </div>
-                  {task.project && (
-                    <p className="text-[10px] text-stone-400 mt-0.5">{task.project.name}</p>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <Badge className={taskStatusColor(task.status)}>
-                    {TASK_STATUS_LABELS[task.status]}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3">
-                  <Badge className={taskPriorityColor(task.priority)}>
-                    {task.priority}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 text-stone-500">{task.assignedTo?.name ?? '—'}</td>
-                <td className={`px-4 py-3 ${isOverdue(task.deadline) && task.status !== 'DONE' ? 'text-red-500' : 'text-stone-500'}`}>
-                  {formatDate(task.deadline)}
-                </td>
-                {canEdit && (
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      <button onClick={() => onEdit(task)} className="p-1 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100">
-                        <Pencil size={13} />
-                      </button>
-                      {isAdmin && (
-                        <button onClick={() => onDelete(task.id)} className="p-1 rounded text-stone-400 hover:text-red-600 hover:bg-red-50">
-                          <Trash2 size={13} />
-                        </button>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-stone-100 bg-stone-50">
+                <th className="text-left px-4 py-2.5 font-medium text-stone-500 uppercase tracking-wide">Title</th>
+                <th className="text-left px-4 py-2.5 font-medium text-stone-500 uppercase tracking-wide">Status</th>
+                <th className="text-left px-4 py-2.5 font-medium text-stone-500 uppercase tracking-wide">Priority</th>
+                <th className="text-left px-4 py-2.5 font-medium text-stone-500 uppercase tracking-wide">Assignee</th>
+                <th className="text-left px-4 py-2.5 font-medium text-stone-500 uppercase tracking-wide">Deadline</th>
+                {canEdit && <th className="px-4 py-2.5" />}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-50">
+              {tasks.length === 0 && (
+                <tr><td colSpan={6} className="text-center py-8 text-stone-400">No tasks found</td></tr>
+              )}
+              {tasks.map((task) => (
+                <tr key={task.id} className="table-row-hover">
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-stone-900">{task.title}</span>
+                      {isOverdue(task.deadline) && task.status !== 'DONE' && (
+                        <AlertCircle size={11} className="text-red-400" />
                       )}
                     </div>
+                    {task.project && (
+                      <p className="text-[10px] text-stone-400 mt-0.5">{task.project.name}</p>
+                    )}
                   </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <Badge className={taskStatusColor(task.status)}>
+                      {TASK_STATUS_LABELS[task.status]}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <Badge className={taskPriorityColor(task.priority)}>
+                      {task.priority}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-stone-500 whitespace-nowrap">{task.assignedTo?.name ?? '—'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {task.deadline ? (() => {
+                      const colors = getTaskUrgencyColors(task.deadline, task.status, now)
+                      return (
+                        <span className={cn("inline-block text-[10px] font-medium px-2 py-0.5 rounded-full border", colors.badgeClasses)}>
+                          {formatDate(task.deadline)}
+                          {colors.timeLeftStr && ` (${colors.timeLeftStr})`}
+                        </span>
+                      )
+                    })() : (
+                      <span className="text-stone-400">—</span>
+                    )}
+                  </td>
+                  {canEdit && (
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1 justify-end">
+                        <button onClick={() => onEdit(task)} className="p-1 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100">
+                          <Pencil size={13} />
+                        </button>
+                        {isAdmin && (
+                          <button onClick={() => onDelete(task.id)} className="p-1 rounded text-stone-400 hover:text-red-600 hover:bg-red-50">
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
 }
 
 // ── Task Card ─────────────────────────────────────────────
-function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, showStatusSelect }: {
+function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, showStatusSelect, now }: {
   task: Task
   canEdit: boolean
   onEdit: (t: Task) => void
@@ -414,13 +451,14 @@ function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, sh
   onStatusChange: (id: string, s: TaskStatus) => void
   isAdmin: boolean
   showStatusSelect?: boolean
+  now: Date
 }) {
-  const overdue = isOverdue(task.deadline) && task.status !== 'DONE'
+  const colors = getTaskUrgencyColors(task.deadline, task.status, now)
 
   return (
-    <div className="bg-white rounded-lg border border-stone-100 p-3 shadow-card">
+    <div className={cn("rounded-lg border p-3 shadow-card transition-all", colors.cardClasses)}>
       <div className="flex items-start justify-between gap-2 mb-2">
-        <p className="text-xs font-medium text-stone-900 leading-snug">{task.title}</p>
+        <p className="text-xs font-semibold text-stone-900 leading-snug">{task.title}</p>
         {canEdit && (
           <div className="flex items-center gap-1 flex-shrink-0">
             <button onClick={() => onEdit(task)} className="p-1 rounded text-stone-300 hover:text-stone-600 hover:bg-stone-100">
@@ -438,7 +476,7 @@ function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, sh
       <div className="flex items-center gap-1.5 flex-wrap mb-2">
         <Badge className={taskPriorityColor(task.priority)}>{task.priority}</Badge>
         {task.project && (
-          <span className="text-[10px] text-stone-400 bg-stone-50 rounded px-1.5 py-0.5">
+          <span className="text-[10px] text-stone-400 bg-stone-50/50 rounded px-1.5 py-0.5">
             {task.project.name}
           </span>
         )}
@@ -446,9 +484,16 @@ function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, sh
 
       <div className="flex items-center justify-between mt-1">
         <div className="flex items-center gap-1">
-          {overdue && <AlertCircle size={11} className="text-red-400" />}
-          <span className={`text-[10px] ${overdue ? 'text-red-500' : 'text-stone-400'}`}>
-            {formatDate(task.deadline)}
+          {task.deadline && colors.isOverdue && <AlertCircle size={11} className="text-red-400 animate-pulse" />}
+          <span className={cn("text-[10px]", colors.textClasses)}>
+            {task.deadline ? (
+              <>
+                {formatDate(task.deadline)}
+                {colors.timeLeftStr && ` · ${colors.timeLeftStr}`}
+              </>
+            ) : (
+              'No deadline'
+            )}
           </span>
         </div>
         {task.assignedTo && (
@@ -470,6 +515,164 @@ function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, sh
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
+      )}
+
+      <TimeTracker taskId={task.id} />
+    </div>
+  )
+}
+
+// ── TimeTracker ───────────────────────────────────────────
+function TimeTracker({ taskId }: { taskId: string }) {
+  const [logs, setLogs] = useState<TimeLog[]>([])
+  const [running, setRunning] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+  const [startedAt, setStartedAt] = useState<string | null>(null)
+  const [showPanel, setShowPanel] = useState(false)
+  const [manualMinutes, setManualMinutes] = useState('')
+  const [manualNote, setManualNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const totalLogged = logs.reduce((s, l) => s + l.minutes, 0)
+
+  const fetchLogs = useCallback(async () => {
+    const res = await fetch(`/api/time-logs?taskId=${taskId}`)
+    const j = await res.json()
+    setLogs(j.data ?? [])
+  }, [taskId])
+
+  useEffect(() => { fetchLogs() }, [fetchLogs])
+
+  useEffect(() => {
+    if (running) {
+      intervalRef.current = setInterval(() => setElapsed(e => e + 1), 1000)
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+  }, [running])
+
+  const startTimer = () => {
+    setStartedAt(new Date().toISOString())
+    setElapsed(0)
+    setRunning(true)
+    toast.success('Timer started')
+  }
+
+  const stopTimer = async () => {
+    if (!startedAt) return
+    setRunning(false)
+    const endedAt = new Date().toISOString()
+    const mins = Math.max(1, Math.round(elapsed / 60))
+    setSaving(true)
+    try {
+      const res = await fetch('/api/time-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, minutes: mins, startedAt, endedAt }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error)
+      toast.success(`Logged ${fmtMins(mins)}`)
+      await fetchLogs()
+    } catch (e: any) { toast.error(e.message) }
+    finally { setSaving(false); setElapsed(0); setStartedAt(null) }
+  }
+
+  const logManual = async () => {
+    const mins = parseInt(manualMinutes)
+    if (!mins || mins <= 0) return toast.error('Enter valid minutes')
+    setSaving(true)
+    try {
+      const res = await fetch('/api/time-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId, minutes: mins, note: manualNote || null }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error)
+      toast.success(`Logged ${fmtMins(mins)}`)
+      setManualMinutes(''); setManualNote('')
+      await fetchLogs()
+    } catch (e: any) { toast.error(e.message) }
+    finally { setSaving(false) }
+  }
+
+  const deleteLog = async (id: string) => {
+    await fetch(`/api/time-logs/${id}`, { method: 'DELETE' })
+    setLogs(prev => prev.filter(l => l.id !== id))
+    toast.success('Log removed')
+  }
+
+  const fmtElapsed = () => {
+    const h = Math.floor(elapsed / 3600)
+    const m = Math.floor((elapsed % 3600) / 60)
+    const s = elapsed % 60
+    return h > 0
+      ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+      : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+  }
+
+  return (
+    <div className="mt-2 border-t border-stone-50 pt-2">
+      <div className="flex items-center gap-1.5">
+        {running ? (
+          <button onClick={stopTimer} disabled={saving}
+            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-red-50 text-red-600 hover:bg-red-100 transition-colors font-medium">
+            <Square size={9} fill="currentColor" /> Stop · {fmtElapsed()}
+          </button>
+        ) : (
+          <button onClick={startTimer}
+            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-green-50 text-green-700 hover:bg-green-100 transition-colors font-medium">
+            <Play size={9} fill="currentColor" /> Start timer
+          </button>
+        )}
+        <button onClick={() => setShowPanel(p => !p)}
+          className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-stone-50 text-stone-500 hover:bg-stone-100 transition-colors">
+          <Clock size={9} />
+          {totalLogged > 0 ? fmtMins(totalLogged) : 'Log'}
+        </button>
+      </div>
+
+      {showPanel && (
+        <div className="mt-2 space-y-2">
+          <div className="flex gap-1">
+            <input
+              type="number" min="1" placeholder="mins"
+              value={manualMinutes}
+              onChange={e => setManualMinutes(e.target.value)}
+              className="w-14 text-[10px] border border-stone-200 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-stone-300"
+            />
+            <input
+              type="text" placeholder="note (optional)"
+              value={manualNote}
+              onChange={e => setManualNote(e.target.value)}
+              className="flex-1 text-[10px] border border-stone-200 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-stone-300"
+            />
+            <button onClick={logManual} disabled={saving}
+              className="text-[10px] px-2 py-1 rounded bg-stone-800 text-white hover:bg-stone-700 disabled:opacity-50 transition-colors whitespace-nowrap">
+              + Log
+            </button>
+          </div>
+
+          {logs.length > 0 && (
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {logs.map(log => (
+                <div key={log.id} className="flex items-center justify-between text-[10px] text-stone-500 bg-stone-50 rounded px-2 py-1">
+                  <span className="font-medium text-stone-700">{fmtMins(log.minutes)}</span>
+                  <span className="flex-1 mx-2 truncate">{log.note ?? log.user.name}</span>
+                  <button onClick={() => deleteLog(log.id)} className="text-stone-300 hover:text-red-500 transition-colors">
+                    <Trash size={9} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {logs.length === 0 && (
+            <p className="text-[10px] text-stone-300 text-center py-1">No time logged yet</p>
+          )}
+        </div>
       )}
     </div>
   )

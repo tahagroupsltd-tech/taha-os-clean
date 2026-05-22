@@ -1,0 +1,200 @@
+{
+  "name": "Taha OS — WhatsApp Task Notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "task-updates",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-phone",
+              "leftValue": "={{ $json.body.task.assignedTo.phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-assignee-phone",
+      "name": "Has Assignee Phone?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [320, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "phone-field",
+              "name": "recipientPhone",
+              "value": "={{ $json.body.task.assignedTo.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "message-field",
+              "name": "messageText",
+              "value": "={{ \"🔔 *Task Notification*\\n\\n*Task:* \" + $json.body.task.title + \"\\n*Project:* \" + ($json.body.task.project ? $json.body.task.project.name : \"None\") + \"\\n*Priority:* \" + $json.body.task.priority + \"\\n*Status:* \" + $json.body.task.status.replace('_', ' ') + \"\\n\\n*Updated By:* \" + $json.body.updatedBy.name + \" (\" + $json.body.updatedBy.role.toLowerCase() + \")\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "format-message",
+      "name": "Format Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [560, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/YOUR_ACCOUNT_SID/Messages.json",
+        "authentication": "basicAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "=whatsapp:{{ $json.recipientPhone }}"
+            },
+            {
+              "name": "From",
+              "value": "whatsapp:+14155238886"
+            },
+            {
+              "name": "Body",
+              "value": "={{ $json.messageText }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-via-twilio",
+      "name": "Send WhatsApp (Twilio)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 60],
+      "credentials": {
+        "basicAuth": {
+          "id": "twilio-auth",
+          "name": "Twilio Auth credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://your-evolution-api-instance.com/message/sendText/YOUR_INSTANCE_NAME",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_EVOLUTION_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.recipientPhone, options: { delay: 1200, presence: \"composing\" }, textMessage: { text: $json.messageText } }) }}",
+        "options": {}
+      },
+      "id": "send-via-evolution",
+      "name": "Send WhatsApp (Evolution API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 220]
+    },
+    {
+      "parameters": {
+        "errorMessage": "Missing phone number for task assignee. Webhook event skipped."
+      },
+      "id": "no-phone-error",
+      "name": "Log No Phone",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [560, 320]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "check-assignee-phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-assignee-phone": {
+      "main": [
+        [
+          {
+            "node": "format-message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "no-phone-error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format-message": {
+      "main": [
+        [
+          {
+            "node": "send-via-twilio",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "send-via-evolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1"
+}

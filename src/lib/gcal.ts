@@ -180,7 +180,10 @@ export function getGoogleAuthUrl(): string {
   return client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
-    scope: ['https://www.googleapis.com/auth/calendar.events'],
+    scope: [
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/drive',
+    ],
   })
 }
 
@@ -350,6 +353,74 @@ export async function syncOsEventToGcal(
     const authClient = await getAuthClientForUser(userId)
     if (!authClient) return
 
+    // Gather project attendee emails if event belongs to a project
+    let attendees: { email: string }[] = []
+    try {
+      const eventRes = await fetch(
+        `${REST}/events?id=eq.${encodeURIComponent(input.osEventId)}&select=projectId`,
+        { headers: sbHdrs(), cache: 'no-store' }
+      )
+      if (eventRes.ok) {
+        const eventRows = await eventRes.json()
+        const projectId = eventRows[0]?.projectId
+        if (projectId) {
+          // Fetch client id from project
+          const projectRes = await fetch(
+            `${REST}/projects?id=eq.${encodeURIComponent(projectId)}&select=clientId`,
+            { headers: sbHdrs(), cache: 'no-store' }
+          )
+          let clientId: string | null = null
+          if (projectRes.ok) {
+            const projectRows = await projectRes.json()
+            clientId = projectRows[0]?.clientId ?? null
+          }
+
+          // Fetch content assignees (editors) and creators (managers)
+          const contentRes = await fetch(
+            `${REST}/content?projectId=eq.${encodeURIComponent(projectId)}&select=assigneeId,createdById`,
+            { headers: sbHdrs(), cache: 'no-store' }
+          )
+          const contentRows = contentRes.ok ? await contentRes.json() : []
+
+          // Fetch task assignees and creators
+          const tasksRes = await fetch(
+            `${REST}/tasks?projectId=eq.${encodeURIComponent(projectId)}&select=assignedToId,createdById`,
+            { headers: sbHdrs(), cache: 'no-store' }
+          )
+          const tasksRows = tasksRes.ok ? await tasksRes.json() : []
+
+          const userIds = new Set<string>()
+          if (clientId) userIds.add(clientId)
+          for (const c of contentRows) {
+            if (c.assigneeId) userIds.add(c.assigneeId)
+            if (c.createdById) userIds.add(c.createdById)
+          }
+          for (const t of tasksRows) {
+            if (t.assignedToId) userIds.add(t.assignedToId)
+            if (t.createdById) userIds.add(t.createdById)
+          }
+          userIds.delete(userId) // Exclude current user (organizer)
+
+          if (userIds.size > 0) {
+            const idList = Array.from(userIds).map(id => `eq.${encodeURIComponent(id)}`).join(',')
+            const usersRes = await fetch(
+              `${REST}/users?id=in.(${idList})&select=email`,
+              { headers: sbHdrs(), cache: 'no-store' }
+            )
+            if (usersRes.ok) {
+              const userRows = await usersRes.json()
+              const emails = userRows
+                .map((u: any) => u.email?.trim())
+                .filter(Boolean)
+              attendees = Array.from(new Set<string>(emails)).map(email => ({ email }))
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[gcal] error gathering project attendee emails:', err)
+    }
+
     const reminderMins = await getUserReminderMins(userId)
     const cal = google.calendar({ version: 'v3', auth: authClient })
 
@@ -364,6 +435,7 @@ export async function syncOsEventToGcal(
       start: { dateTime: new Date(input.startTime).toISOString(), timeZone: 'Asia/Kolkata' },
       end:   { dateTime: new Date(input.endTime).toISOString(),   timeZone: 'Asia/Kolkata' },
       reminders,
+      attendees: attendees.length > 0 ? attendees : undefined,
     }
 
     const existing = await getEventLink(userId, 'os_event', input.osEventId, 'owner')
@@ -374,10 +446,15 @@ export async function syncOsEventToGcal(
         calendarId: 'primary',
         eventId: existing.gcal_event_id,
         requestBody: eventBody,
+        sendUpdates: 'all',
       })
       gcalEventId = res.data.id ?? null
     } else {
-      const res = await cal.events.insert({ calendarId: 'primary', requestBody: eventBody })
+      const res = await cal.events.insert({
+        calendarId: 'primary',
+        requestBody: eventBody,
+        sendUpdates: 'all',
+      })
       gcalEventId = res.data.id ?? null
     }
 
@@ -423,10 +500,11 @@ export async function syncContentEvents(
   // Editor event
   if (assigneeId) {
     const link = await getEventLink(assigneeId, 'content', contentId, 'assignee')
+    const deadlineDate = new Date(postDate.getTime() - 2 * 24 * 60 * 60 * 1000)
     const eventId = await syncCalendarEvent(assigneeId, {
       title: `✂️ Finish: ${title}`,
       description: `Post date: ${postDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}${desc ? '\n' + desc : ''}`,
-      date: postDate,
+      date: deadlineDate,
       gcalEventId: link?.gcal_event_id ?? null,
     })
     if (eventId) await upsertEventLink(assigneeId, 'content', contentId, 'assignee', eventId)
@@ -477,7 +555,7 @@ export async function syncTaskEvent(
  * Delete all calendar events linked to an entity (when task/content is deleted).
  */
 export async function deleteEntityCalendarEvents(
-  entityType: 'task' | 'content',
+  entityType: 'task' | 'content' | 'os_event',
   entityId: string,
 ): Promise<void> {
   const links = await getEntityLinks(entityType, entityId)

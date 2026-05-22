@@ -202,7 +202,7 @@ export function SettingsClient({ currentUserId, canResetOthers, users, gcalConne
             onChange={(e) => setCurrentPw(e.target.value)}
             placeholder="Your current password"
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="relative">
               <Input
                 label="New password"

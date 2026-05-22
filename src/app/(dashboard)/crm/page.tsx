@@ -73,7 +73,7 @@ export default function CrmPage() {
         ) : (
           <>
             {/* Top stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="stat-card">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="p-2 rounded-md bg-green-50">

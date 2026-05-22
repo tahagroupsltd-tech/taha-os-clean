@@ -151,6 +151,9 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
 export const TRANSACTION_CATEGORY_LABELS: Record<TransactionCategory, string> = {
   CLIENT_PAYMENT: 'Client Payment',
   SALARY: 'Salary',
+  SHOOT_COST: 'Shoot Cost',
+  FREELANCER: 'Freelancer',
+  ADS: 'Ads / Paid Media',
   EQUIPMENT: 'Equipment',
   SOFTWARE: 'Software',
   MARKETING: 'Marketing',
@@ -188,3 +191,101 @@ export function formatTime(date: string | Date | null | undefined): string {
     minute: '2-digit',
   })
 }
+
+export function formatDuration(ms: number): string {
+  const seconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (days > 0) {
+    const hr = hours % 24
+    return hr > 0 ? `${days}d ${hr}h` : `${days}d`
+  }
+  if (hours > 0) {
+    const min = minutes % 60
+    return min > 0 ? `${hours}h ${min}m` : `${hours}h`
+  }
+  if (minutes > 0) {
+    return `${minutes}m`
+  }
+  return '1m'
+}
+
+export function getTaskUrgencyColors(deadline: string | null | undefined, status: TaskStatus, now: Date) {
+  if (status === 'DONE') {
+    return {
+      cardClasses: 'bg-green-50/25 border-green-200/80 text-stone-900',
+      badgeClasses: 'bg-green-50 text-green-700 border-green-200',
+      textClasses: 'text-green-600 font-medium',
+      timeLeftStr: 'Done',
+      isOverdue: false,
+    }
+  }
+
+  if (!deadline) {
+    return {
+      cardClasses: 'bg-white border-stone-100 text-stone-900',
+      badgeClasses: 'bg-stone-50 text-stone-600 border-stone-100',
+      textClasses: 'text-stone-400',
+      timeLeftStr: '',
+      isOverdue: false,
+    }
+  }
+
+  const target = new Date(deadline)
+  const diff = target.getTime() - now.getTime()
+
+  if (diff < 0) {
+    return {
+      cardClasses: 'bg-red-50/20 border-red-200/80 text-stone-900',
+      badgeClasses: 'bg-red-50 text-red-700 border-red-200',
+      textClasses: 'text-red-500 font-bold',
+      timeLeftStr: `Overdue`,
+      isOverdue: true,
+    }
+  }
+
+  // < 12h
+  if (diff < 12 * 60 * 60 * 1000) {
+    return {
+      cardClasses: 'bg-red-50/20 border-red-200/80 text-stone-900',
+      badgeClasses: 'bg-red-50 text-red-700 border-red-200',
+      textClasses: 'text-red-500 font-semibold',
+      timeLeftStr: `${formatDuration(diff)} left`,
+      isOverdue: false,
+    }
+  }
+
+  // < 24h
+  if (diff < 24 * 60 * 60 * 1000) {
+    return {
+      cardClasses: 'bg-pink-50/20 border-pink-200/80 text-stone-900',
+      badgeClasses: 'bg-pink-50 text-pink-700 border-pink-200',
+      textClasses: 'text-pink-600 font-semibold',
+      timeLeftStr: `${formatDuration(diff)} left`,
+      isOverdue: false,
+    }
+  }
+
+  // < 3 days
+  if (diff < 3 * 24 * 60 * 60 * 1000) {
+    return {
+      cardClasses: 'bg-amber-50/20 border-amber-200/80 text-stone-900',
+      badgeClasses: 'bg-amber-50 text-amber-700 border-amber-200',
+      textClasses: 'text-amber-700 font-semibold',
+      timeLeftStr: `${formatDuration(diff)} left`,
+      isOverdue: false,
+    }
+  }
+
+  // Safe (> 3 days)
+  return {
+    cardClasses: 'bg-green-50/10 border-green-100 text-stone-900',
+    badgeClasses: 'bg-green-50/50 text-green-700 border-green-100',
+    textClasses: 'text-green-600',
+    timeLeftStr: `${formatDuration(diff)} left`,
+    isOverdue: false,
+  }
+}
+

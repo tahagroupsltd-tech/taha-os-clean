@@ -95,7 +95,7 @@ export default async function BillingPage() {
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         {/* Summary strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="stat-card">
             <div className="flex items-center gap-2 mb-2">
               <IndianRupee size={14} className="text-stone-500" />
@@ -147,39 +147,41 @@ export default async function BillingPage() {
                   <p className="text-sm font-semibold text-stone-900">{formatMoney(clientThisMonth)}</p>
                 </div>
               </div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-stone-50 bg-stone-50/40">
-                    <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide">Project</th>
-                    <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide">Status</th>
-                    <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide">Last paid</th>
-                    <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide">This month</th>
-                    <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide">All time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-50">
-                  {projectRows.map((r) => (
-                    <tr key={r.id}>
-                      <td className="px-5 py-3 font-medium text-stone-900">{r.project}</td>
-                      <td className="px-5 py-3">
-                        <StatusPill status={r.status} daysSinceLast={r.daysSinceLast} />
-                      </td>
-                      <td className="px-5 py-3 text-right text-stone-500">
-                        {r.lastPaymentDate ? (
-                          <>
-                            <div>{formatDate(r.lastPaymentDate)}</div>
-                            <div className="text-[10px] text-stone-400">{formatMoney(r.lastPaymentAmount)}</div>
-                          </>
-                        ) : (
-                          <span className="text-stone-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-right font-semibold text-stone-900">{formatMoney(r.thisMonthIncome)}</td>
-                      <td className="px-5 py-3 text-right text-stone-700">{formatMoney(r.allIncome)}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-stone-50 bg-stone-50/40">
+                      <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Project</th>
+                      <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Status</th>
+                      <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Last paid</th>
+                      <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">This month</th>
+                      <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">All time</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-stone-50">
+                    {projectRows.map((r) => (
+                      <tr key={r.id}>
+                        <td className="px-5 py-3 font-medium text-stone-900 whitespace-nowrap">{r.project}</td>
+                        <td className="px-5 py-3 whitespace-nowrap">
+                          <StatusPill status={r.status} daysSinceLast={r.daysSinceLast} />
+                        </td>
+                        <td className="px-5 py-3 text-right text-stone-500 whitespace-nowrap">
+                          {r.lastPaymentDate ? (
+                            <>
+                              <div>{formatDate(r.lastPaymentDate)}</div>
+                              <div className="text-[10px] text-stone-400">{formatMoney(r.lastPaymentAmount)}</div>
+                            </>
+                          ) : (
+                            <span className="text-stone-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-right font-semibold text-stone-900 whitespace-nowrap">{formatMoney(r.thisMonthIncome)}</td>
+                        <td className="px-5 py-3 text-right text-stone-700 whitespace-nowrap">{formatMoney(r.allIncome)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )
         })}
@@ -190,30 +192,32 @@ export default async function BillingPage() {
             <div className="px-5 py-3 border-b border-stone-100">
               <p className="text-sm font-semibold text-stone-700">Projects without a client</p>
             </div>
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-stone-50 bg-stone-50/40">
-                  <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide">Project</th>
-                  <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide">Status</th>
-                  <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide">Last paid</th>
-                  <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide">All time</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-50">
-                {noClient.map((r) => (
-                  <tr key={r.id}>
-                    <td className="px-5 py-3 font-medium text-stone-900">{r.project}</td>
-                    <td className="px-5 py-3">
-                      <StatusPill status={r.status} daysSinceLast={r.daysSinceLast} />
-                    </td>
-                    <td className="px-5 py-3 text-right text-stone-500">
-                      {r.lastPaymentDate ? formatDate(r.lastPaymentDate) : '—'}
-                    </td>
-                    <td className="px-5 py-3 text-right font-semibold text-stone-900">{formatMoney(r.allIncome)}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-stone-50 bg-stone-50/40">
+                    <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Project</th>
+                    <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Status</th>
+                    <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Last paid</th>
+                    <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">All time</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-stone-50">
+                  {noClient.map((r) => (
+                    <tr key={r.id}>
+                      <td className="px-5 py-3 font-medium text-stone-900 whitespace-nowrap">{r.project}</td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <StatusPill status={r.status} daysSinceLast={r.daysSinceLast} />
+                      </td>
+                      <td className="px-5 py-3 text-right text-stone-500 whitespace-nowrap">
+                        {r.lastPaymentDate ? formatDate(r.lastPaymentDate) : '—'}
+                      </td>
+                      <td className="px-5 py-3 text-right font-semibold text-stone-900 whitespace-nowrap">{formatMoney(r.allIncome)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

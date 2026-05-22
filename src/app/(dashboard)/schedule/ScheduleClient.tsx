@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { format, parseISO, subDays, isValid } from 'date-fns'
 import {
   CalendarDays, Plus, X, AlertTriangle, CheckCircle2,
-  Trash2, ChevronRight, RefreshCw, Users, FolderKanban,
+  Trash2, ChevronRight, RefreshCw, Users, FolderKanban, Scale,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
@@ -21,74 +21,75 @@ type ScheduleResult = {
   created: number
   projectName: string
   editorName: string
-  items: { id: string; title: string; postDate: string | null }[]
+  items: { id: string; title: string; postDate: string | null; editorName?: string }[]
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Try to parse a loose date string into YYYY-MM-DD. Returns null if unparseable. */
 function parseLooseDate(raw: string): string | null {
   const s = raw.trim()
   if (!s) return null
-
-  // ISO already: 2026-05-01
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
     const d = new Date(s)
     return isValid(d) ? s : null
   }
-
-  // dd/mm/yyyy or dd-mm-yyyy
   const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
   if (dmy) {
     const d = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
     return isValid(d) ? format(d, 'yyyy-MM-dd') : null
   }
-
-  // "20 May" or "May 20" or "20 May 2026"
   const attempt = new Date(s.replace(/(\d+)(st|nd|rd|th)/i, '$1') + (/ \d{4}$/.test(s) ? '' : ` ${new Date().getFullYear()}`))
   if (isValid(attempt)) return format(attempt, 'yyyy-MM-dd')
-
   return null
 }
 
-function fmtDate(iso: string) {
-  return format(parseISO(iso), 'dd MMM yyyy')
-}
+function fmtDate(iso: string) { return format(parseISO(iso), 'dd MMM yyyy') }
+function fmtDay(iso: string)  { return format(parseISO(iso), 'EEE, dd MMM') }
 
-function fmtDay(iso: string) {
-  return format(parseISO(iso), 'EEE, dd MMM')
-}
+// Editor colour palette for balance mode
+const EDITOR_COLORS = [
+  'bg-blue-100 text-blue-700 border-blue-200',
+  'bg-violet-100 text-violet-700 border-violet-200',
+  'bg-amber-100 text-amber-700 border-amber-200',
+  'bg-green-100 text-green-700 border-green-200',
+  'bg-rose-100 text-rose-700 border-rose-200',
+  'bg-cyan-100 text-cyan-700 border-cyan-200',
+]
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function ScheduleClient({ projects, editors }: { projects: Project[]; editors: Editor[] }) {
   // Config state
-  const [projectId, setProjectId]       = useState('')
-  const [assigneeId, setAssigneeId]     = useState('')
-  const [contentType, setContentType]   = useState<ContentType>('REEL')
-  const [bufferDays, setBufferDays]     = useState(2)
-  const [titlePrefix, setTitlePrefix]   = useState('')
+  const [projectId, setProjectId]         = useState('')
+  const [assigneeId, setAssigneeId]       = useState('')
+  const [balanceMode, setBalanceMode]     = useState(false)
+  const [balanceEditorIds, setBalanceEditorIds] = useState<string[]>([])
+  const [contentType, setContentType]     = useState<ContentType>('REEL')
+  const [bufferDays, setBufferDays]       = useState(2)
+  const [titlePrefix, setTitlePrefix]     = useState('')
 
   // Date entry
-  const [singleDate, setSingleDate]     = useState('')       // date picker value
-  const [bulkInput, setBulkInput]       = useState('')       // paste area
-  const [postingDates, setPostingDates] = useState<string[]>([]) // YYYY-MM-DD[]
+  const [singleDate, setSingleDate]       = useState('')
+  const [bulkInput, setBulkInput]         = useState('')
+  const [postingDates, setPostingDates]   = useState<string[]>([])
 
   // UI state
-  const [submitting, setSubmitting]     = useState(false)
-  const [result, setResult]             = useState<ScheduleResult | null>(null)
+  const [submitting, setSubmitting]       = useState(false)
+  const [result, setResult]               = useState<ScheduleResult | null>(null)
 
   // ── Derived ─────────────────────────────────────────────────────────────
 
   const selectedProject = projects.find((p) => p.id === projectId)
   const selectedEditor  = editors.find((e) => e.id === assigneeId)
 
-  const sortedDates = useMemo(
-    () => [...postingDates].sort(),
-    [postingDates]
+  // Active editor IDs depending on mode
+  const activeEditorIds = useMemo(
+    () => balanceMode ? balanceEditorIds : (assigneeId ? [assigneeId] : []),
+    [balanceMode, balanceEditorIds, assigneeId]
   )
 
-  /** Map of ISO date → count of existing items for conflict detection */
+  const sortedDates = useMemo(() => [...postingDates].sort(), [postingDates])
+
   const dateCounts = useMemo(() => {
     const m = new Map<string, number>()
     for (const d of sortedDates) m.set(d, (m.get(d) ?? 0) + 1)
@@ -100,30 +101,53 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
     [dateCounts]
   )
 
-  // Preview rows — unique dates only (duplicates removed)
   const uniqueDates = useMemo(() => [...new Set(sortedDates)], [sortedDates])
-
   const prefix = titlePrefix.trim() || selectedProject?.name || 'Video'
+
+  // Safe buffer: always at least 1
+  const safeBuffer = Math.max(1, bufferDays)
 
   const previewRows = useMemo(
     () =>
-      uniqueDates.map((iso, i) => ({
-        idx: i + 1,
-        postDate: iso,
-        readyBy: format(subDays(parseISO(iso), bufferDays), 'yyyy-MM-dd'),
-        title: `${prefix} #${i + 1} — ${fmtDate(iso)}`,
-      })),
-    [uniqueDates, bufferDays, prefix]
+      uniqueDates.map((iso, i) => {
+        const editorId = activeEditorIds.length > 0
+          ? activeEditorIds[i % activeEditorIds.length]
+          : null
+        const editor = editorId ? editors.find((e) => e.id === editorId) : null
+        const colorIdx = editorId ? (activeEditorIds.indexOf(editorId) % EDITOR_COLORS.length) : 0
+        return {
+          idx: i + 1,
+          postDate: iso,
+          readyBy: format(subDays(parseISO(iso), safeBuffer), 'yyyy-MM-dd'),
+          title: `${prefix} #${i + 1} — ${fmtDate(iso)}`,
+          editorId,
+          editorName: editor?.name ?? null,
+          colorCls: EDITOR_COLORS[colorIdx],
+        }
+      }),
+    [uniqueDates, safeBuffer, prefix, activeEditorIds, editors]
   )
+
+  // Per-editor item count for balance stats
+  const editorLoadMap = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const row of previewRows) {
+      if (row.editorId) m.set(row.editorId, (m.get(row.editorId) ?? 0) + 1)
+    }
+    return m
+  }, [previewRows])
 
   // ── Handlers ────────────────────────────────────────────────────────────
 
+  function toggleBalanceEditor(id: string) {
+    setBalanceEditorIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    )
+  }
+
   function addSingleDate() {
     if (!singleDate) return
-    if (postingDates.includes(singleDate)) {
-      toast.error('Date already in list')
-      return
-    }
+    if (postingDates.includes(singleDate)) { toast.error('Date already in list'); return }
     setPostingDates((prev) => [...prev, singleDate])
     setSingleDate('')
   }
@@ -132,16 +156,11 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
     const raw = bulkInput.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean)
     const parsed: string[] = []
     const failed: string[] = []
-
     for (const s of raw) {
       const d = parseLooseDate(s)
-      if (d && !postingDates.includes(d) && !parsed.includes(d)) {
-        parsed.push(d)
-      } else if (!d) {
-        failed.push(s)
-      }
+      if (d && !postingDates.includes(d) && !parsed.includes(d)) parsed.push(d)
+      else if (!d) failed.push(s)
     }
-
     if (parsed.length) {
       setPostingDates((prev) => [...prev, ...parsed])
       setBulkInput('')
@@ -152,33 +171,34 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
     }
   }
 
-  function removeDate(iso: string) {
-    setPostingDates((prev) => prev.filter((d) => d !== iso))
-  }
-
-  function clearAll() {
-    setPostingDates([])
-    setBulkInput('')
-  }
+  function removeDate(iso: string) { setPostingDates((prev) => prev.filter((d) => d !== iso)) }
+  function clearAll() { setPostingDates([]); setBulkInput('') }
 
   async function handleSubmit() {
-    if (!projectId)   { toast.error('Select a client project'); return }
-    if (!assigneeId)  { toast.error('Select an editor'); return }
+    if (!projectId) { toast.error('Select a client project'); return }
+    if (balanceMode && balanceEditorIds.length === 0) { toast.error('Select at least one editor to balance across'); return }
+    if (!balanceMode && !assigneeId) { toast.error('Select an editor'); return }
     if (!uniqueDates.length) { toast.error('Add at least one posting date'); return }
 
     setSubmitting(true)
     try {
+      const payload: Record<string, any> = {
+        projectId,
+        contentType,
+        bufferDays: safeBuffer,
+        titlePrefix: prefix,
+        postingDates: uniqueDates,
+      }
+      if (balanceMode) {
+        payload.assigneeIds = balanceEditorIds
+      } else {
+        payload.assigneeId = assigneeId
+      }
+
       const res = await fetch('/api/schedule/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId,
-          assigneeId,
-          contentType,
-          bufferDays,
-          titlePrefix: prefix,
-          postingDates: uniqueDates,
-        }),
+        body: JSON.stringify(payload),
       })
 
       const data = await res.json()
@@ -194,12 +214,9 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
   }
 
   function resetForNextClient() {
-    setProjectId('')
-    setAssigneeId('')
-    setTitlePrefix('')
-    setPostingDates([])
-    setBulkInput('')
-    setResult(null)
+    setProjectId(''); setAssigneeId(''); setTitlePrefix('')
+    setPostingDates([]); setBulkInput(''); setResult(null)
+    setBalanceEditorIds([])
   }
 
   // ── Success Screen ───────────────────────────────────────────────────────
@@ -215,24 +232,23 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
             <h2 className="text-base font-semibold text-stone-900 mb-1">
               {result.created} videos scheduled
             </h2>
-            <p className="text-sm text-stone-500 mb-1">
+            <p className="text-sm text-stone-500 mb-6">
               Client: <span className="font-medium text-stone-700">{result.projectName}</span>
             </p>
-            <p className="text-sm text-stone-500 mb-6">
-              Editor: <span className="font-medium text-stone-700">{result.editorName}</span>
-            </p>
 
-            {/* Mini schedule summary */}
             <div className="text-left border border-stone-100 rounded-lg overflow-hidden mb-6">
               <div className="px-3 py-2 bg-stone-50 border-b border-stone-100">
-                <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide">
-                  Created items
-                </p>
+                <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-wide">Created items</p>
               </div>
               <div className="divide-y divide-stone-50 max-h-56 overflow-y-auto">
                 {result.items.map((item) => (
                   <div key={item.id} className="px-3 py-2 flex items-center justify-between gap-2">
-                    <p className="text-xs text-stone-700 truncate">{item.title}</p>
+                    <div className="min-w-0">
+                      <p className="text-xs text-stone-700 truncate">{item.title}</p>
+                      {item.editorName && (
+                        <p className="text-[10px] text-stone-400">{item.editorName}</p>
+                      )}
+                    </div>
                     {item.postDate && (
                       <span className="text-[10px] text-stone-400 flex-shrink-0">
                         {fmtDay(item.postDate.slice(0, 10))}
@@ -244,18 +260,11 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
             </div>
 
             <div className="flex gap-3 justify-center">
-              <Link
-                href="/content"
-                className="inline-flex items-center gap-2 bg-stone-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-stone-800 transition-colors"
-              >
+              <Link href="/content" className="inline-flex items-center gap-2 bg-stone-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-stone-800 transition-colors">
                 View in Content
               </Link>
-              <button
-                onClick={resetForNextClient}
-                className="inline-flex items-center gap-2 bg-white border border-stone-200 text-stone-700 text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-stone-50 transition-colors"
-              >
-                <RefreshCw size={14} />
-                Schedule another
+              <button onClick={resetForNextClient} className="inline-flex items-center gap-2 bg-white border border-stone-200 text-stone-700 text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-stone-50 transition-colors">
+                <RefreshCw size={14} /> Schedule another
               </button>
             </div>
           </div>
@@ -275,19 +284,31 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
 
           {/* Client + Editor */}
           <div className="bg-white rounded-lg border border-stone-100 overflow-hidden">
-            <div className="px-4 py-3 border-b border-stone-100 flex items-center gap-2">
-              <FolderKanban size={13} className="text-stone-400" />
-              <p className="panel-title">Client &amp; Editor</p>
+            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FolderKanban size={13} className="text-stone-400" />
+                <p className="panel-title">Client &amp; Editor</p>
+              </div>
+              {/* Balance toggle */}
+              <button
+                type="button"
+                onClick={() => { setBalanceMode((v) => !v); setBalanceEditorIds([]); setAssigneeId('') }}
+                className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md border transition-colors ${
+                  balanceMode
+                    ? 'bg-violet-50 text-violet-700 border-violet-200'
+                    : 'bg-stone-50 text-stone-500 border-stone-200 hover:bg-stone-100'
+                }`}
+              >
+                <Scale size={11} />
+                {balanceMode ? 'Balance on' : 'Balance off'}
+              </button>
             </div>
             <div className="p-4 space-y-3">
               <div>
                 <label className="block text-xs font-medium text-stone-600 mb-1">Client project</label>
                 <select
                   value={projectId}
-                  onChange={(e) => {
-                    setProjectId(e.target.value)
-                    setTitlePrefix('')
-                  }}
+                  onChange={(e) => { setProjectId(e.target.value); setTitlePrefix('') }}
                   className="input-base text-sm"
                 >
                   <option value="">— Select client —</option>
@@ -297,21 +318,65 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-stone-600 mb-1">Assign to editor</label>
-                <select
-                  value={assigneeId}
-                  onChange={(e) => setAssigneeId(e.target.value)}
-                  className="input-base text-sm"
-                >
-                  <option value="">— Select editor —</option>
-                  {editors.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.name} ({e.role.toLowerCase()})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Single editor mode */}
+              {!balanceMode && (
+                <div>
+                  <label className="block text-xs font-medium text-stone-600 mb-1">Assign to editor</label>
+                  <select
+                    value={assigneeId}
+                    onChange={(e) => setAssigneeId(e.target.value)}
+                    className="input-base text-sm"
+                  >
+                    <option value="">— Select editor —</option>
+                    {editors.map((e) => (
+                      <option key={e.id} value={e.id}>{e.name} ({e.role.toLowerCase()})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Balance mode: multi-editor picker */}
+              {balanceMode && (
+                <div>
+                  <label className="block text-xs font-medium text-stone-600 mb-2">
+                    Select editors to balance across
+                    <span className="text-stone-400 font-normal ml-1">— content distributed evenly in order</span>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {editors.map((e, idx) => {
+                      const selected = balanceEditorIds.includes(e.id)
+                      const colorCls = selected
+                        ? EDITOR_COLORS[balanceEditorIds.indexOf(e.id) % EDITOR_COLORS.length]
+                        : 'bg-stone-50 text-stone-500 border-stone-200'
+                      return (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => toggleBalanceEditor(e.id)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors ${colorCls}`}
+                        >
+                          <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                            selected ? 'bg-current/20' : 'bg-stone-200 text-stone-500'
+                          }`}>
+                            {selected ? balanceEditorIds.indexOf(e.id) + 1 : '+'}
+                          </span>
+                          {e.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {balanceEditorIds.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-stone-50">
+                      <p className="text-[10px] text-stone-400">
+                        Order: {balanceEditorIds.map((id, i) => {
+                          const e = editors.find(x => x.id === id)
+                          return `${e?.name ?? '?'}`
+                        }).join(' → ')} → (repeats)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -345,16 +410,21 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
                 <div>
                   <label className="block text-xs font-medium text-stone-600 mb-1">
                     Buffer days
-                    <span className="text-stone-400 font-normal ml-1">(ready before posting)</span>
+                    <span className="text-stone-400 font-normal ml-1">(min 1 — deadline before posting)</span>
                   </label>
                   <input
                     type="number"
-                    min={0}
+                    min={1}
                     max={30}
                     value={bufferDays}
-                    onChange={(e) => setBufferDays(Math.max(0, Number(e.target.value)))}
+                    onChange={(e) => setBufferDays(Math.max(1, Number(e.target.value)))}
                     className="input-base text-sm"
                   />
+                  {bufferDays < 1 && (
+                    <p className="text-[10px] text-amber-600 mt-1 flex items-center gap-1">
+                      <AlertTriangle size={10} /> Minimum 1 day required
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-stone-600 mb-1">
@@ -380,7 +450,6 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
               <p className="panel-title">Add posting dates</p>
             </div>
             <div className="p-4 space-y-3">
-              {/* Single date picker */}
               <div className="flex gap-2">
                 <input
                   type="date"
@@ -394,18 +463,13 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
                   disabled={!singleDate}
                   className="flex items-center gap-1.5 px-3 py-2 bg-stone-900 text-white text-xs font-medium rounded-lg hover:bg-stone-800 disabled:opacity-40 transition-colors flex-shrink-0"
                 >
-                  <Plus size={13} />
-                  Add
+                  <Plus size={13} /> Add
                 </button>
               </div>
-
-              {/* Bulk paste */}
               <div>
                 <label className="block text-xs font-medium text-stone-600 mb-1">
                   Or paste multiple dates
-                  <span className="text-stone-400 font-normal ml-1">
-                    — comma-separated or one per line
-                  </span>
+                  <span className="text-stone-400 font-normal ml-1">— comma-separated or one per line</span>
                 </label>
                 <textarea
                   rows={3}
@@ -432,24 +496,49 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
 
           {/* Stats strip */}
           {uniqueDates.length > 0 && (
-            <div className="grid grid-cols-3 gap-3">
-              <div className="stat-card text-center">
-                <p className="text-2xl font-bold text-stone-900">{uniqueDates.length}</p>
-                <p className="text-[11px] text-stone-400 mt-0.5">Videos</p>
+            <div className={`grid gap-2 sm:gap-3 ${balanceMode && balanceEditorIds.length > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+              <div className="stat-card text-center p-3 sm:p-4">
+                <p className="text-lg sm:text-2xl font-bold text-stone-900">{uniqueDates.length}</p>
+                <p className="text-[10px] sm:text-[11px] text-stone-400 mt-0.5">Videos</p>
               </div>
-              <div className="stat-card text-center">
-                <p className="text-2xl font-bold text-stone-900">
-                  {uniqueDates.length > 0
-                    ? fmtDate(sortedDates[0]).replace(/\d{4}$/, '').trim()
-                    : '—'}
+              <div className="stat-card text-center p-3 sm:p-4">
+                <p className="text-lg sm:text-2xl font-bold text-stone-900 truncate">
+                  {fmtDate(sortedDates[0]).replace(/\d{4}$/, '').trim()}
                 </p>
-                <p className="text-[11px] text-stone-400 mt-0.5">First post</p>
+                <p className="text-[10px] sm:text-[11px] text-stone-400 mt-0.5">First post</p>
               </div>
-              <div className="stat-card text-center">
-                <p className={`text-2xl font-bold ${conflicts.length > 0 ? 'text-amber-500' : 'text-stone-900'}`}>
+              <div className="stat-card text-center p-3 sm:p-4">
+                <p className={`text-lg sm:text-2xl font-bold ${conflicts.length > 0 ? 'text-amber-500' : 'text-stone-900'}`}>
                   {conflicts.length}
                 </p>
-                <p className="text-[11px] text-stone-400 mt-0.5">Conflicts</p>
+                <p className="text-[10px] sm:text-[11px] text-stone-400 mt-0.5">Conflicts</p>
+              </div>
+              {balanceMode && balanceEditorIds.length > 0 && (
+                <div className="stat-card text-center p-3 sm:p-4">
+                  <p className="text-lg sm:text-2xl font-bold text-violet-700">{balanceEditorIds.length}</p>
+                  <p className="text-[10px] sm:text-[11px] text-stone-400 mt-0.5">Editors</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Balance load summary */}
+          {balanceMode && balanceEditorIds.length > 0 && uniqueDates.length > 0 && (
+            <div className="bg-violet-50 border border-violet-100 rounded-lg px-4 py-3">
+              <p className="text-[11px] font-semibold text-violet-800 mb-2 flex items-center gap-1.5">
+                <Scale size={11} /> Editing load distribution
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {balanceEditorIds.map((id, idx) => {
+                  const editor = editors.find((e) => e.id === id)
+                  const count = editorLoadMap.get(id) ?? 0
+                  const colorCls = EDITOR_COLORS[idx % EDITOR_COLORS.length]
+                  return (
+                    <span key={id} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${colorCls}`}>
+                      {editor?.name ?? '?'} — {count} video{count !== 1 ? 's' : ''}
+                    </span>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -484,8 +573,7 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
                   onClick={clearAll}
                   className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-red-500 transition-colors"
                 >
-                  <Trash2 size={11} />
-                  Clear all
+                  <Trash2 size={11} /> Clear all
                 </button>
               )}
             </div>
@@ -503,7 +591,13 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
                       <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-500 uppercase tracking-wide w-8">#</th>
                       <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-500 uppercase tracking-wide">Title</th>
                       <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-500 uppercase tracking-wide">Posts on</th>
-                      <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-500 uppercase tracking-wide">Ready by</th>
+                      <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-500 uppercase tracking-wide">
+                        Deadline
+                        <span className="ml-1 text-stone-400 font-normal normal-case">({safeBuffer}d before)</span>
+                      </th>
+                      {balanceMode && (
+                        <th className="px-3 py-2 text-left text-[10px] font-semibold text-stone-500 uppercase tracking-wide">Editor</th>
+                      )}
                       <th className="px-3 py-2 w-6" />
                     </tr>
                   </thead>
@@ -511,13 +605,22 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
                     {previewRows.map((row) => (
                       <tr key={row.postDate} className="table-row-hover">
                         <td className="px-3 py-2.5 text-stone-400">{row.idx}</td>
-                        <td className="px-3 py-2.5 text-stone-700 max-w-[180px] truncate">{row.title}</td>
+                        <td className="px-3 py-2.5 text-stone-700 max-w-[160px] truncate">{row.title}</td>
                         <td className="px-3 py-2.5 text-stone-600 whitespace-nowrap">{fmtDay(row.postDate)}</td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className={`font-medium ${bufferDays > 0 ? 'text-blue-600' : 'text-stone-500'}`}>
-                            {fmtDay(row.readyBy)}
-                          </span>
+                          <span className="font-medium text-blue-600">{fmtDay(row.readyBy)}</span>
                         </td>
+                        {balanceMode && (
+                          <td className="px-3 py-2.5">
+                            {row.editorName ? (
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium border ${row.colorCls}`}>
+                                {row.editorName}
+                              </span>
+                            ) : (
+                              <span className="text-stone-300">—</span>
+                            )}
+                          </td>
+                        )}
                         <td className="px-3 py-2.5">
                           <button
                             onClick={() => removeDate(row.postDate)}
@@ -537,20 +640,30 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
           {/* Submit */}
           {uniqueDates.length > 0 && (
             <div className="bg-white rounded-lg border border-stone-100 p-4">
-              {/* Summary line */}
-              <div className="flex items-center gap-2 mb-4 text-xs text-stone-500">
+              <div className="flex items-center gap-2 mb-4 text-xs text-stone-500 flex-wrap">
                 <FolderKanban size={12} className="text-stone-400" />
                 <span>{selectedProject?.name ?? <span className="text-red-400">no project</span>}</span>
                 <ChevronRight size={11} className="text-stone-300" />
                 <Users size={12} className="text-stone-400" />
-                <span>{selectedEditor?.name ?? <span className="text-red-400">no editor</span>}</span>
+                {balanceMode ? (
+                  <span>
+                    {balanceEditorIds.length > 0
+                      ? balanceEditorIds.map((id) => editors.find((e) => e.id === id)?.name ?? '?').join(', ')
+                      : <span className="text-red-400">no editors selected</span>}
+                  </span>
+                ) : (
+                  <span>{selectedEditor?.name ?? <span className="text-red-400">no editor</span>}</span>
+                )}
                 <ChevronRight size={11} className="text-stone-300" />
                 <span className="font-medium text-stone-700">{uniqueDates.length} × {contentType}</span>
               </div>
 
               <button
                 onClick={handleSubmit}
-                disabled={submitting || !projectId || !assigneeId || uniqueDates.length === 0}
+                disabled={
+                  submitting || !projectId || uniqueDates.length === 0 ||
+                  (balanceMode ? balanceEditorIds.length === 0 : !assigneeId)
+                }
                 className="w-full py-2.5 bg-stone-900 text-white text-sm font-medium rounded-lg hover:bg-stone-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
                 {submitting ? (
@@ -566,7 +679,9 @@ export function ScheduleClient({ projects, editors }: { projects: Project[]; edi
                 )}
               </button>
               <p className="text-[10px] text-stone-400 text-center mt-2">
-                Editor will receive a notification with the full batch summary
+                {balanceMode
+                  ? `Each editor will be notified with their portion of the batch`
+                  : `Editor will receive a notification with the full batch summary`}
               </p>
             </div>
           )}

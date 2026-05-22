@@ -447,6 +447,28 @@ export const TOOL_DEFS = [
       parameters: { type: 'object', properties: {} },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'log_metrics',
+      description: 'Log engagement metrics for a posted content item (views, likes, comments, shares, reach). Use after the user mentions performance numbers for a reel, video, or post.',
+      parameters: {
+        type: 'object',
+        properties: {
+          contentId:  { type: 'string', description: 'ID of the content item' },
+          platform:   { type: 'string', enum: ['INSTAGRAM','YOUTUBE','TIKTOK','FACEBOOK','OTHER'], description: 'Platform where it was posted' },
+          postUrl:    { type: 'string', description: 'Direct URL to the post (optional)' },
+          views:      { type: 'number' },
+          likes:      { type: 'number' },
+          comments:   { type: 'number' },
+          shares:     { type: 'number' },
+          reach:      { type: 'number' },
+          saved:      { type: 'number' },
+        },
+        required: ['contentId', 'platform', 'views'],
+      },
+    },
+  },
 ] as const
 
 // ── Tool handlers ───────────────────────────────────────────
@@ -551,12 +573,20 @@ export async function runTool(
         }) ?? task
         if (full.assignedToId && full.assignedToId !== user.id) {
           const projectLabel = full.project ? ` · ${full.project.name}` : ''
+          const dueLabel = full.deadline
+            ? ` (due ${new Date(full.deadline).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})`
+            : ''
           await notify({
             userId: full.assignedToId,
             type: 'TASK_ASSIGNED',
             title: `New task: ${full.title}`,
-            message: `${user.name} assigned you a ${full.priority.toLowerCase()} task${projectLabel}.`,
+            message: `${user.name} assigned you a ${full.priority.toLowerCase()} task${projectLabel}${dueLabel}.`,
             link: '/tasks',
+            gcalEvent: {
+              title: `📋 New task: ${full.title}`,
+              description: `${user.name} assigned you this task${projectLabel}${dueLabel}.`,
+              date: full.deadline ? new Date(full.deadline) : new Date(),
+            },
           })
         }
         return { ok: true, data: { id: full.id, title: full.title, assignee: full.assignedTo?.name ?? null } }
@@ -851,12 +881,18 @@ export async function runTool(
         const updated = await sbUpdate('tasks', { id: `eq.${args.taskId}` }, patch)
         // Notify new assignee if changed
         if (args.assignedToId && args.assignedToId !== user.id) {
+          const deadlineDate = patch.deadline ? new Date(patch.deadline) : null
           await notify({
             userId: args.assignedToId,
             type: 'TASK_ASSIGNED',
             title: `Task updated: ${updated?.title ?? args.taskId}`,
             message: `${user.name} assigned you a task.`,
             link: '/tasks',
+            gcalEvent: {
+              title: `📋 Task: ${updated?.title ?? args.taskId}`,
+              description: `${user.name} assigned you this task.`,
+              date: deadlineDate ?? new Date(),
+            },
           }).catch(() => {})
         }
         return { ok: true, data: { id: args.taskId, ...patch } }
@@ -997,6 +1033,21 @@ export async function runTool(
         }
 
         return { ok: true, data: stats }
+      }
+
+      case 'log_metrics': {
+        const { contentId, platform = 'INSTAGRAM', postUrl, views = 0, likes = 0, comments = 0, shares = 0, reach = 0, saved = 0 } = args
+        if (!contentId) return { ok: false, error: 'contentId required' }
+        const { sbInsert, nowTs } = await import('@/lib/supa')
+        const row = await sbInsert('content_metrics', {
+          content_id: contentId, platform,
+          post_url: postUrl ?? null,
+          views: Math.round(views), likes: Math.round(likes),
+          comments: Math.round(comments), shares: Math.round(shares),
+          reach: Math.round(reach), saved: Math.round(saved),
+          recorded_at: nowTs(), created_at: nowTs(),
+        })
+        return { ok: true, data: { id: row.id, contentId, platform, views, likes, comments } }
       }
 
       default:

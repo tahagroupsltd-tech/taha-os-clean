@@ -1,6 +1,14 @@
 // src/types/index.ts
 
-export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'CLIENT'
+export type Role =
+  | 'ADMIN'
+  | 'MANAGER'
+  | 'EMPLOYEE'
+  | 'EDITOR'
+  | 'SCRIPTWRITER'
+  | 'GRAPHIC_DESIGNER'
+  | 'WEB_DESIGNER'
+  | 'CLIENT'
 
 export type ProjectStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED'
 
@@ -26,6 +34,7 @@ export interface AuthUser {
   name: string
   role: Role
   phone?: string | null
+  email?: string | null
 }
 
 export interface User {
@@ -34,6 +43,7 @@ export interface User {
   name: string
   role: Role
   phone?: string | null
+  email?: string | null
   isActive: boolean
   createdAt: string
 }
@@ -54,7 +64,13 @@ export interface Project {
   assignedToId?: string | null
   assignedTo?: { id: string; name: string } | null
   createdAt: string
-  _count?: { tasks: number; content: number }
+  _count?: {
+    tasks: number
+    content: number
+    transactions?: number
+    events?: number
+    notes?: number
+  }
 }
 
 export interface Task {
@@ -65,9 +81,9 @@ export interface Task {
   priority: TaskPriority
   deadline?: string | null
   assignedToId?: string | null
-  assignedTo?: { id: string; name: string } | null
+  assignedTo?: { id: string; name: string; phone?: string | null } | null
   createdById: string
-  createdBy?: { id: string; name: string }
+  createdBy?: { id: string; name: string; phone?: string | null }
   projectId?: string | null
   project?: { id: string; name: string } | null
   createdAt: string
@@ -99,6 +115,9 @@ export type TransactionType = 'INCOME' | 'EXPENSE'
 export type TransactionCategory =
   | 'CLIENT_PAYMENT'
   | 'SALARY'
+  | 'SHOOT_COST'
+  | 'FREELANCER'
+  | 'ADS'
   | 'EQUIPMENT'
   | 'SOFTWARE'
   | 'MARKETING'

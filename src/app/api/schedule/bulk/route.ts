@@ -1,7 +1,7 @@
 // src/app/api/schedule/bulk/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
-import { sbFindOne, sbInsertMany, nowTs } from '@/lib/supa'
+import { sbFindOne, sbSelect, sbInsertMany, nowTs } from '@/lib/supa'
 import { notify } from '@/lib/notify'
 import { syncContentEvents } from '@/lib/gcal'
 
@@ -20,15 +20,16 @@ export async function POST(req: NextRequest) {
 
     const {
       projectId,
-      assigneeId,
+      assigneeId,       // single editor mode
+      assigneeIds,      // balance mode — takes precedence if present
       contentType,
       bufferDays = 2,
       titlePrefix = '',
       postingDates,
     } = body
 
-    if (!projectId || !assigneeId || !contentType) {
-      return NextResponse.json({ error: 'projectId, assigneeId, and contentType are required' }, { status: 400 })
+    if (!projectId || !contentType) {
+      return NextResponse.json({ error: 'projectId and contentType are required' }, { status: 400 })
     }
     if (!Array.isArray(postingDates) || postingDates.length === 0) {
       return NextResponse.json({ error: 'postingDates must be a non-empty array' }, { status: 400 })
@@ -37,30 +38,59 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Maximum 200 dates per batch' }, { status: 400 })
     }
 
-    const [project, assignee] = await Promise.all([
+    // Resolve editor ID list (balance mode = multiple, single mode = one)
+    const editorIdList: string[] = Array.isArray(assigneeIds) && assigneeIds.length > 0
+      ? assigneeIds
+      : (assigneeId ? [assigneeId] : [])
+
+    if (editorIdList.length === 0) {
+      return NextResponse.json({ error: 'At least one editor must be assigned' }, { status: 400 })
+    }
+
+    // Enforce minimum 1-day buffer — deadline must always be before posting date
+    const safeBuffer = Math.max(1, bufferDays as number)
+
+    const [project, editorRows] = await Promise.all([
       sbFindOne('projects', { select: 'id,name', filters: { id: `eq.${projectId}` } }),
-      sbFindOne('users', { select: 'id,name', filters: { id: `eq.${assigneeId}` } }),
+      sbSelect('users', {
+        select: 'id,name',
+        filters: { id: `in.(${editorIdList.join(',')})` },
+      }),
     ])
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-    if (!assignee) return NextResponse.json({ error: 'Editor not found' }, { status: 404 })
+
+    const editorMap = new Map<string, string>(
+      (editorRows as any[]).map((e: any) => [e.id, e.name])
+    )
+
+    // Check all editors exist
+    for (const id of editorIdList) {
+      if (!editorMap.has(id)) {
+        return NextResponse.json({ error: `Editor not found: ${id}` }, { status: 404 })
+      }
+    }
 
     const prefix = (titlePrefix as string).trim() || project.name
-    const bufferMs = (bufferDays as number) * 24 * 60 * 60 * 1000
+    const bufferMs = safeBuffer * 24 * 60 * 60 * 1000
 
     const now = nowTs()
     const items = (postingDates as string[]).map((dateStr, i) => {
       const postDate = new Date(dateStr)
       postDate.setHours(0, 0, 0, 0)
       const readyBy = new Date(postDate.getTime() - bufferMs)
+
+      // Round-robin editor assignment
+      const editorId = editorIdList[i % editorIdList.length]
+
       return {
         title: `${prefix} #${i + 1} — ${postDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`,
         type: contentType,
         status: 'EDITING',
         postDate: postDate.toISOString(),
-        assigneeId,
+        assigneeId: editorId,
         createdById: user.id,
         projectId,
-        description: `Ready by: ${readyBy.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} (${bufferDays}d before posting)`,
+        description: `Deadline: ${readyBy.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} (${safeBuffer}d before posting)`,
         createdAt: now,
         updatedAt: now,
       }
@@ -76,17 +106,35 @@ export async function POST(req: NextRequest) {
         : `${fmt(sorted[0])} – ${fmt(sorted[sorted.length - 1])}`
     })()
 
-    await notify({
-      userId: assigneeId,
-      title: `${created.length} videos assigned — ${project.name}`,
-      message: `${created.length} content items scheduled for editing (${dateRange}). Check your Content tracker.`,
-      type: 'CONTENT_ASSIGNED',
-      link: '/content',
-    })
+    // Group created items by editor for per-editor notifications
+    const itemsByEditor = new Map<string, typeof created>()
+    for (const item of created as any[]) {
+      const existing = itemsByEditor.get(item.assigneeId) ?? []
+      existing.push(item)
+      itemsByEditor.set(item.assigneeId, existing)
+    }
+
+    // Send notification to each editor with their portion
+    await Promise.allSettled(
+      Array.from(itemsByEditor.entries()).map(([editorId, editorItems]) => {
+        const editorName = editorMap.get(editorId) ?? 'Editor'
+        const count = editorItems.length
+        const isBalanced = editorIdList.length > 1
+        return notify({
+          userId: editorId,
+          title: `${count} video${count !== 1 ? 's' : ''} assigned — ${project.name}`,
+          message: isBalanced
+            ? `You've been assigned ${count} of ${created.length} content items for ${project.name} (${dateRange}). Check your Content tracker.`
+            : `${count} content items scheduled for editing (${dateRange}). Check your Content tracker.`,
+          type: 'CONTENT_ASSIGNED',
+          link: '/content',
+        })
+      })
+    )
 
     // Sync to Google Calendar (fire-and-forget)
     Promise.allSettled(
-      created.map((c: any) =>
+      (created as any[]).map((c: any) =>
         syncContentEvents(c.id, {
           title: c.title,
           postDate: new Date(c.postDate),
@@ -97,15 +145,21 @@ export async function POST(req: NextRequest) {
       )
     ).catch(() => {})
 
+    // Summary editor name for response
+    const editorNameSummary = editorIdList.length === 1
+      ? (editorMap.get(editorIdList[0]) ?? 'Editor')
+      : editorIdList.map((id) => editorMap.get(id) ?? '?').join(', ')
+
     return NextResponse.json(
       {
         created: created.length,
         projectName: project.name,
-        editorName: assignee.name,
-        items: created.map((c: any) => ({
+        editorName: editorNameSummary,
+        items: (created as any[]).map((c: any) => ({
           id: c.id,
           title: c.title,
           postDate: c.postDate,
+          editorName: editorMap.get(c.assigneeId) ?? null,
         })),
       },
       { headers: { 'Cache-Control': 'no-store' } }

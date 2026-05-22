@@ -16,9 +16,11 @@ export async function GET(req: NextRequest) {
   const type = searchParams.get('type')
   const from = searchParams.get('from')
   const to = searchParams.get('to')
+  const projectId = searchParams.get('projectId')
 
   const filters: Record<string, string> = {}
   if (type) filters.type = `eq.${type}`
+  if (projectId) filters.projectId = `eq.${projectId}`
 
   const items = await sbSelect('transactions', {
     select: TRANSACTION_SELECT,
@@ -85,6 +87,7 @@ export async function POST(req: NextRequest) {
     select: TRANSACTION_SELECT,
     filters: { id: `eq.${t.id}` },
   }) ?? t
+
 
   // Bust server-component caches so Overview + Billing update on next load
   revalidatePath('/overview')

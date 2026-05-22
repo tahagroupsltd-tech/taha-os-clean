@@ -47,12 +47,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Title and type are required' }, { status: 400 })
   }
 
+  let finalDescription = description || null
+  if (postDate) {
+    const post = new Date(postDate)
+    const deadline = new Date(post.getTime() - 2 * 24 * 60 * 60 * 1000)
+    const deadlineStr = `Deadline: ${deadline.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} (2d before posting)`
+    finalDescription = description
+      ? `${deadlineStr}\n${description.replace(/^Deadline: \d{2} \w{3} \(\d+d before posting\)\n?/, '').trim()}`
+      : deadlineStr
+  }
+
   const now = nowTs()
   const item = await sbInsert('content', {
     title,
     type,
     status: status ?? 'IDEA',
-    description: description || null,
+    description: finalDescription,
     driveLink: driveLink || null,
     caption: caption || null,
     postDate: postDate ? new Date(postDate).toISOString() : null,
@@ -94,9 +104,9 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Sync to Google Calendar (fire-and-forget)
+  // Sync to Google Calendar
   if (full.postDate) {
-    syncContentEvents(full.id, {
+    await syncContentEvents(full.id, {
       title: full.title,
       postDate: new Date(full.postDate),
       assigneeId: full.assigneeId,

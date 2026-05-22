@@ -15,8 +15,11 @@ import type { TaskStatus, ContentStatus, EventType } from '@/types'
 import {
   CheckSquare, FileVideo, FolderKanban, Users, AlertCircle,
   Calendar as CalendarIcon, IndianRupee, TrendingUp, TrendingDown,
+  BarChart2, Eye, Heart, MessageCircle, Share2,
 } from 'lucide-react'
 import Link from 'next/link'
+import { ActiveTasksList } from './ActiveTasksList'
+
 
 function greet(name: string) {
   const h = new Date().getHours()
@@ -143,6 +146,22 @@ async function getStats(userId: string, role: string) {
       .filter(c => c.amount > 0)
   }
 
+  // Engagement metrics — top content by views
+  const rawMetrics = await safe(
+    () => sbSelect('content_metrics', {
+      select: '*,content:content!content_id(id,title,type,project:projects!projectId(id,name))',
+      filters: {},
+      order: 'views.desc,recorded_at.desc',
+      limit: 20,
+    }),
+    [] as any[]
+  )
+  const seenMetrics = new Set<string>()
+  const dedupedMetrics = rawMetrics.filter((m: any) => {
+    if (seenMetrics.has(m.content_id)) return false
+    seenMetrics.add(m.content_id); return true
+  }).slice(0, 5)
+
   return {
     totalTasks, todoTasks, urgentTasks, overdueTasks,
     totalContent, editingContent,
@@ -154,6 +173,7 @@ async function getStats(userId: string, role: string) {
     monthlyIncome,
     monthlyExpense,
     topClients,
+      topMetrics: dedupedMetrics,
   }
 }
 
@@ -318,42 +338,7 @@ export default async function OverviewPage() {
                 View all →
               </Link>
             </div>
-            <div className="divide-y divide-stone-50">
-              {stats.recentTasks.length === 0 && (
-                <p className="px-4 py-6 text-xs text-stone-400 text-center">No active tasks</p>
-              )}
-              {stats.recentTasks.map((task: any) => (
-                <div key={task.id} className="px-4 py-3 flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <p className="text-xs font-medium text-stone-900 truncate">{task.title}</p>
-                      {isOverdue(task.deadline) && (
-                        <AlertCircle size={11} className="text-red-400 flex-shrink-0" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <Badge className={taskStatusColor(task.status as TaskStatus)}>
-                        {TASK_STATUS_LABELS[task.status as TaskStatus]}
-                      </Badge>
-                      <Badge className={taskPriorityColor(task.priority)}>{task.priority}</Badge>
-                      {task.project && (
-                        <span className="text-[10px] text-stone-400">{task.project.name}</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    {task.assignedTo && (
-                      <p className="text-[10px] text-stone-400">{task.assignedTo.name}</p>
-                    )}
-                    {task.deadline && (
-                      <p className={`text-[10px] mt-0.5 ${isOverdue(task.deadline) ? 'text-red-500' : 'text-stone-400'}`}>
-                        {formatDate(task.deadline)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ActiveTasksList recentTasks={stats.recentTasks} />
           </div>
 
           {/* Upcoming Events */}
@@ -460,6 +445,41 @@ export default async function OverviewPage() {
             </div>
           )}
         </div>
+
+        {/* Engagement Metrics */}
+        {stats.topMetrics.length > 0 && (
+          <div className="bg-white rounded-lg border border-stone-100">
+            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+              <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide flex items-center gap-1.5">
+                <BarChart2 size={13} /> Top Content Performance
+              </p>
+              <Link href="/content" className="text-[10px] text-stone-400 hover:text-stone-700 uppercase tracking-wide">
+                All content →
+              </Link>
+            </div>
+            <div className="divide-y divide-stone-50">
+              {stats.topMetrics.map((m: any) => (
+                <div key={m.id} className="px-4 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 uppercase">{m.platform}</span>
+                      <p className="text-xs font-medium text-stone-900 truncate">{m.content?.title ?? '—'}</p>
+                    </div>
+                    {m.content?.project && (
+                      <p className="text-[10px] text-stone-400">{m.content.project.name}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px] text-stone-500 flex-shrink-0">
+                    <span className="flex items-center gap-1"><Eye size={10} />{m.views.toLocaleString()}</span>
+                    <span className="flex items-center gap-1"><Heart size={10} />{m.likes.toLocaleString()}</span>
+                    <span className="flex items-center gap-1"><MessageCircle size={10} />{m.comments.toLocaleString()}</span>
+                    {m.shares > 0 && <span className="flex items-center gap-1"><Share2 size={10} />{m.shares.toLocaleString()}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
