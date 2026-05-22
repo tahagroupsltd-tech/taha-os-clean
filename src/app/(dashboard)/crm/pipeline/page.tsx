@@ -65,7 +65,13 @@ export default function PipelinePage() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [editMode, setEditMode] = useState(false)
   const [form, setForm] = useState<NewLeadForm>({
+    title: '', stage: 'NEW', source: 'OTHER', value: '', notes: '',
+    niche: '', phone: '', instagram_url: '', youtube_url: '',
+    facebook_url: '', website_url: '', other_links: '', expectedCloseDate: '',
+  })
+  const [editForm, setEditForm] = useState<NewLeadForm>({
     title: '', stage: 'NEW', source: 'OTHER', value: '', notes: '',
     niche: '', phone: '', instagram_url: '', youtube_url: '',
     facebook_url: '', website_url: '', other_links: '', expectedCloseDate: '',
@@ -102,17 +108,12 @@ export default function PipelinePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: form.title,
-          stage: form.stage,
-          source: form.source,
+          title: form.title, stage: form.stage, source: form.source,
           value: form.value ? Number(form.value) : null,
-          notes: form.notes || null,
-          niche: form.niche || null,
+          notes: form.notes || null, niche: form.niche || null,
           phone: form.phone || null,
-          instagram_url: form.instagram_url || null,
-          youtube_url: form.youtube_url || null,
-          facebook_url: form.facebook_url || null,
-          website_url: form.website_url || null,
+          instagram_url: form.instagram_url || null, youtube_url: form.youtube_url || null,
+          facebook_url: form.facebook_url || null, website_url: form.website_url || null,
           other_links: form.other_links || null,
           expectedCloseDate: form.expectedCloseDate || null,
         }),
@@ -130,11 +131,58 @@ export default function PipelinePage() {
     } finally { setSaving(false) }
   }
 
+  async function saveLead() {
+    if (!selectedLead || !editForm.title.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/crm/leads/${selectedLead.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editForm.title, stage: editForm.stage, source: editForm.source,
+          value: editForm.value ? Number(editForm.value) : null,
+          notes: editForm.notes || null, niche: editForm.niche || null,
+          phone: editForm.phone || null,
+          instagram_url: editForm.instagram_url || null, youtube_url: editForm.youtube_url || null,
+          facebook_url: editForm.facebook_url || null, website_url: editForm.website_url || null,
+          other_links: editForm.other_links || null,
+          expectedCloseDate: editForm.expectedCloseDate || null,
+        }),
+      })
+      const data = await res.json()
+      if (data.data) {
+        setLeads(prev => prev.map(l => l.id === selectedLead.id ? data.data : l))
+        setSelectedLead(data.data)
+        setEditMode(false)
+      }
+    } finally { setSaving(false) }
+  }
+
   async function deleteLead(id: string) {
     if (!confirm('Delete this lead?')) return
     await fetch(`/api/crm/leads/${id}`, { method: 'DELETE' })
     setLeads(prev => prev.filter(l => l.id !== id))
     setSelectedLead(null)
+    setEditMode(false)
+  }
+
+  function openEdit(lead: Lead) {
+    setEditForm({
+      title: lead.title ?? '',
+      stage: lead.stage ?? 'NEW',
+      source: lead.source ?? 'OTHER',
+      value: lead.value != null ? String(lead.value) : '',
+      notes: lead.notes ?? '',
+      niche: lead.niche ?? '',
+      phone: lead.phone ?? '',
+      instagram_url: lead.instagram_url ?? '',
+      youtube_url: lead.youtube_url ?? '',
+      facebook_url: lead.facebook_url ?? '',
+      website_url: lead.website_url ?? '',
+      other_links: lead.other_links ?? '',
+      expectedCloseDate: lead.expectedCloseDate ? lead.expectedCloseDate.slice(0, 10) : '',
+    })
+    setEditMode(true)
   }
 
   const byStage = (stage: string) => leads.filter(l => l.stage === stage)
@@ -418,153 +466,220 @@ export default function PipelinePage() {
       {/* Lead detail drawer */}
       {selectedLead && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-lg max-h-[85vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b border-stone-100">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full sm:max-w-lg max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-3 border-b border-stone-100 flex-shrink-0">
               <div>
-                <h3 className="text-sm font-semibold text-stone-900">{selectedLead.title}</h3>
+                <h3 className="text-sm font-semibold text-stone-900 truncate max-w-[280px]">{selectedLead.title}</h3>
                 <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full mt-1 inline-block ${
                   STAGES.find(s => s.id === selectedLead.stage)?.color ?? 'bg-stone-100 text-stone-600'
                 }`}>
                   {STAGES.find(s => s.id === selectedLead.stage)?.label}
                 </span>
               </div>
-              <button onClick={() => setSelectedLead(null)} className="text-stone-400 hover:text-stone-700">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              {selectedLead.value && (
-                <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg">
-                  <IndianRupee size={14} className="text-green-700" />
-                  <span className="text-sm font-bold text-green-800">{formatMoney(Number(selectedLead.value))}</span>
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                {selectedLead.contact && (
-                  <div>
-                    <p className="text-stone-400 mb-0.5">Contact</p>
-                    <p className="font-medium text-stone-800">{selectedLead.contact.name}</p>
-                    {selectedLead.contact.phone && <p className="text-stone-500">{selectedLead.contact.phone}</p>}
-                  </div>
+              <div className="flex items-center gap-2">
+                {!editMode && (
+                  <button
+                    onClick={() => openEdit(selectedLead)}
+                    className="px-3 py-1.5 text-xs font-medium bg-stone-900 text-white rounded-md hover:bg-stone-700"
+                  >
+                    ✏️ Edit
+                  </button>
                 )}
-                {selectedLead.company && (
-                  <div>
-                    <p className="text-stone-400 mb-0.5">Company</p>
-                    <p className="font-medium text-stone-800">{selectedLead.company.name}</p>
-                  </div>
-                )}
-                {selectedLead.assignedTo && (
-                  <div>
-                    <p className="text-stone-400 mb-0.5">Assigned To</p>
-                    <p className="font-medium text-stone-800">{selectedLead.assignedTo.name}</p>
-                  </div>
-                )}
-                {selectedLead.source && (
-                  <div>
-                    <p className="text-stone-400 mb-0.5">Source</p>
-                    <p className="font-medium text-stone-800">{SOURCE_LABELS[selectedLead.source] ?? selectedLead.source}</p>
-                  </div>
-                )}
-                {selectedLead.niche && (
-                  <div>
-                    <p className="text-stone-400 mb-0.5">Niche / Occupation</p>
-                    <span className="inline-block text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full">
-                      {selectedLead.niche}
-                    </span>
-                  </div>
-                )}
-                {selectedLead.phone && (
-                  <div>
-                    <p className="text-stone-400 mb-0.5">Contact Number</p>
-                    <a href={`tel:${selectedLead.phone}`} className="font-medium text-stone-800 hover:text-indigo-600">{selectedLead.phone}</a>
-                  </div>
-                )}
-                {selectedLead.expectedCloseDate && (
-                  <div>
-                    <p className="text-stone-400 mb-0.5">Expected Close</p>
-                    <p className="font-medium text-stone-800">
-                      {new Date(selectedLead.expectedCloseDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </p>
-                  </div>
-                )}
-              </div>
-              {selectedLead.notes && (
-                <div>
-                  <p className="text-xs text-stone-400 mb-1">Notes</p>
-                  <p className="text-sm text-stone-700 bg-stone-50 rounded-lg p-3">{selectedLead.notes}</p>
-                </div>
-              )}
-
-              {/* Social Links in detail drawer */}
-              {(selectedLead.instagram_url || selectedLead.youtube_url || selectedLead.facebook_url || selectedLead.website_url || selectedLead.other_links) && (
-                <div>
-                  <p className="text-xs text-stone-400 mb-2">Social / Source Links</p>
-                  <div className="space-y-1.5">
-                    {selectedLead.instagram_url && (
-                      <a href={selectedLead.instagram_url} target="_blank" rel="noreferrer"
-                        className="flex items-center gap-2 text-xs text-pink-600 hover:text-pink-800 bg-pink-50 border border-pink-100 rounded-lg px-3 py-2 truncate">
-                        <span className="font-bold w-16 flex-shrink-0">Instagram</span>
-                        <span className="truncate">{selectedLead.instagram_url}</span>
-                      </a>
-                    )}
-                    {selectedLead.youtube_url && (
-                      <a href={selectedLead.youtube_url} target="_blank" rel="noreferrer"
-                        className="flex items-center gap-2 text-xs text-red-600 hover:text-red-800 bg-red-50 border border-red-100 rounded-lg px-3 py-2 truncate">
-                        <span className="font-bold w-16 flex-shrink-0">YouTube</span>
-                        <span className="truncate">{selectedLead.youtube_url}</span>
-                      </a>
-                    )}
-                    {selectedLead.facebook_url && (
-                      <a href={selectedLead.facebook_url} target="_blank" rel="noreferrer"
-                        className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 truncate">
-                        <span className="font-bold w-16 flex-shrink-0">Facebook</span>
-                        <span className="truncate">{selectedLead.facebook_url}</span>
-                      </a>
-                    )}
-                    {selectedLead.website_url && (
-                      <a href={selectedLead.website_url} target="_blank" rel="noreferrer"
-                        className="flex items-center gap-2 text-xs text-stone-600 hover:text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 truncate">
-                        <span className="font-bold w-16 flex-shrink-0">Website</span>
-                        <span className="truncate">{selectedLead.website_url}</span>
-                      </a>
-                    )}
-                    {selectedLead.other_links && (
-                      <a href={selectedLead.other_links} target="_blank" rel="noreferrer"
-                        className="flex items-center gap-2 text-xs text-violet-600 hover:text-violet-800 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2 truncate">
-                        <span className="font-bold w-16 flex-shrink-0">Other</span>
-                        <span className="truncate">{selectedLead.other_links}</span>
-                      </a>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Stage mover */}
-              <div>
-                <p className="text-xs text-stone-400 mb-2">Move to stage</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {STAGES.filter(s => s.id !== selectedLead.stage).map(s => (
-                    <button
-                      key={s.id}
-                      onClick={async () => {
-                        await moveLead(selectedLead.id, s.id)
-                        setSelectedLead(prev => prev ? { ...prev, stage: s.id } : null)
-                      }}
-                      className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-opacity hover:opacity-80 ${s.color}`}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
+                <button onClick={() => { setSelectedLead(null); setEditMode(false) }} className="text-stone-400 hover:text-stone-700">
+                  <X size={18} />
+                </button>
               </div>
             </div>
-            <div className="px-5 py-4 border-t border-stone-100 flex justify-end">
-              <button
-                onClick={() => deleteLead(selectedLead.id)}
-                className="px-3 py-1.5 text-xs text-red-600 border border-red-200 rounded-md hover:bg-red-50"
-              >
+
+            <div className="overflow-y-auto flex-1 p-5 space-y-4">
+              {/* ── EDIT MODE ── */}
+              {editMode ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-medium text-stone-600 mb-1">Title</label>
+                    <input value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
+                      className="w-full px-2.5 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-300" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-medium text-stone-600 mb-1">Niche / Occupation</label>
+                      <input value={editForm.niche} onChange={e => setEditForm(f => ({ ...f, niche: e.target.value }))}
+                        placeholder="Restaurant, Fashion…"
+                        className="w-full px-2.5 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-stone-600 mb-1">Contact Number</label>
+                      <input type="tel" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                        placeholder="+91 98765 43210"
+                        className="w-full px-2.5 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-medium text-stone-600 mb-1">Stage</label>
+                      <select value={editForm.stage} onChange={e => setEditForm(f => ({ ...f, stage: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-300">
+                        {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-stone-600 mb-1">Source</label>
+                      <select value={editForm.source} onChange={e => setEditForm(f => ({ ...f, source: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-300">
+                        {Object.entries(SOURCE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-medium text-stone-600 mb-1">Value (₹)</label>
+                      <input type="number" value={editForm.value} onChange={e => setEditForm(f => ({ ...f, value: e.target.value }))}
+                        placeholder="0" className="w-full px-2.5 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-300" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-stone-600 mb-1">Expected Close</label>
+                      <input type="date" value={editForm.expectedCloseDate} onChange={e => setEditForm(f => ({ ...f, expectedCloseDate: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-300" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-wide mb-1.5">Social / Source Links</label>
+                    <div className="space-y-1.5">
+                      {([
+                        { key: 'instagram_url', label: 'Instagram', color: 'text-pink-500' },
+                        { key: 'youtube_url',   label: 'YouTube',   color: 'text-red-500' },
+                        { key: 'facebook_url',  label: 'Facebook',  color: 'text-blue-600' },
+                        { key: 'website_url',   label: 'Website',   color: 'text-stone-500' },
+                        { key: 'other_links',   label: 'Other',     color: 'text-violet-500' },
+                      ] as const).map(({ key, label, color }) => (
+                        <div key={key} className="flex items-center gap-2">
+                          <span className={`text-[10px] font-bold w-16 flex-shrink-0 ${color}`}>{label}</span>
+                          <input
+                            value={(editForm as any)[key]}
+                            onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
+                            className="flex-1 px-2.5 py-1 text-[11px] border border-stone-200 rounded focus:outline-none focus:ring-1 focus:ring-stone-300"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-stone-600 mb-1">Notes</label>
+                    <textarea value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+                      rows={2} placeholder="Notes…"
+                      className="w-full px-2.5 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-300 resize-none" />
+                  </div>
+                </div>
+              ) : (
+                /* ── VIEW MODE ── */
+                <>
+                  {selectedLead.value && (
+                    <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg">
+                      <IndianRupee size={14} className="text-green-700" />
+                      <span className="text-sm font-bold text-green-800">{formatMoney(Number(selectedLead.value))}</span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    {selectedLead.niche && (
+                      <div>
+                        <p className="text-stone-400 mb-0.5">Niche</p>
+                        <span className="inline-block text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full">{selectedLead.niche}</span>
+                      </div>
+                    )}
+                    {selectedLead.phone && (
+                      <div>
+                        <p className="text-stone-400 mb-0.5">Contact</p>
+                        <a href={`tel:${selectedLead.phone}`} className="font-medium text-stone-800 hover:text-indigo-600">{selectedLead.phone}</a>
+                      </div>
+                    )}
+                    {selectedLead.contact && (
+                      <div>
+                        <p className="text-stone-400 mb-0.5">CRM Contact</p>
+                        <p className="font-medium text-stone-800">{selectedLead.contact.name}</p>
+                        {selectedLead.contact.phone && <p className="text-stone-500">{selectedLead.contact.phone}</p>}
+                      </div>
+                    )}
+                    {selectedLead.assignedTo && (
+                      <div>
+                        <p className="text-stone-400 mb-0.5">Assigned To</p>
+                        <p className="font-medium text-stone-800">{selectedLead.assignedTo.name}</p>
+                      </div>
+                    )}
+                    {selectedLead.source && (
+                      <div>
+                        <p className="text-stone-400 mb-0.5">Source</p>
+                        <p className="font-medium text-stone-800">{SOURCE_LABELS[selectedLead.source] ?? selectedLead.source}</p>
+                      </div>
+                    )}
+                    {selectedLead.expectedCloseDate && (
+                      <div>
+                        <p className="text-stone-400 mb-0.5">Expected Close</p>
+                        <p className="font-medium text-stone-800">
+                          {new Date(selectedLead.expectedCloseDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  {selectedLead.notes && (
+                    <div>
+                      <p className="text-xs text-stone-400 mb-1">Notes</p>
+                      <p className="text-sm text-stone-700 bg-stone-50 rounded-lg p-3">{selectedLead.notes}</p>
+                    </div>
+                  )}
+                  {(selectedLead.instagram_url || selectedLead.youtube_url || selectedLead.facebook_url || selectedLead.website_url || selectedLead.other_links) && (
+                    <div>
+                      <p className="text-xs text-stone-400 mb-2">Social / Source Links</p>
+                      <div className="space-y-1.5">
+                        {[{ url: selectedLead.instagram_url, label: 'Instagram', cls: 'text-pink-600 bg-pink-50 border-pink-100' },
+                          { url: selectedLead.youtube_url,   label: 'YouTube',   cls: 'text-red-600 bg-red-50 border-red-100' },
+                          { url: selectedLead.facebook_url,  label: 'Facebook',  cls: 'text-blue-600 bg-blue-50 border-blue-100' },
+                          { url: selectedLead.website_url,   label: 'Website',   cls: 'text-stone-600 bg-stone-50 border-stone-200' },
+                          { url: selectedLead.other_links,   label: 'Other',     cls: 'text-violet-600 bg-violet-50 border-violet-100' },
+                        ].filter(x => x.url).map(({ url, label, cls }) => (
+                          <a key={label} href={url!} target="_blank" rel="noreferrer"
+                            className={`flex items-center gap-2 text-xs border rounded-lg px-3 py-2 truncate hover:opacity-80 ${cls}`}>
+                            <span className="font-bold w-16 flex-shrink-0">{label}</span>
+                            <span className="truncate">{url}</span>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Stage mover */}
+                  <div>
+                    <p className="text-xs text-stone-400 mb-2">Move to stage</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {STAGES.filter(s => s.id !== selectedLead.stage).map(s => (
+                        <button key={s.id}
+                          onClick={async () => { await moveLead(selectedLead.id, s.id); setSelectedLead(prev => prev ? { ...prev, stage: s.id } : null) }}
+                          className={`text-[11px] font-medium px-2.5 py-1 rounded-full transition-opacity hover:opacity-80 ${s.color}`}>
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-stone-100 flex items-center justify-between flex-shrink-0">
+              <button onClick={() => deleteLead(selectedLead.id)}
+                className="px-3 py-1.5 text-xs text-red-600 border border-red-200 rounded-md hover:bg-red-50">
                 Delete Lead
               </button>
+              {editMode && (
+                <div className="flex gap-2">
+                  <button onClick={() => setEditMode(false)}
+                    className="px-3 py-1.5 text-xs text-stone-600 border border-stone-200 rounded-md hover:bg-stone-50">
+                    Cancel
+                  </button>
+                  <button onClick={saveLead} disabled={saving}
+                    className="px-4 py-1.5 text-xs font-semibold bg-stone-900 text-white rounded-md hover:bg-stone-700 disabled:opacity-50">
+                    {saving ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

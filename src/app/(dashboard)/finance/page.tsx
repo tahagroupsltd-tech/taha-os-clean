@@ -1097,7 +1097,7 @@ function LoansTab({
       <div className="bg-white rounded-lg border border-stone-100 shadow-card overflow-hidden">
         <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
           <p className="text-xs font-semibold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
-            <TrendingDown size={13} className="text-red-500" /> Loans Owed (Amount to Give to Others)
+            <TrendingDown size={13} className="text-red-500" /> Loans Borrowed (Amount Owed to Others)
           </p>
           <button
             onClick={() => {
@@ -1115,7 +1115,7 @@ function LoansTab({
         ) : loans.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-sm font-medium text-stone-500 mb-1">No loans log yet</p>
-            <p className="text-xs text-stone-400">Click New Loan to log what you owe to others</p>
+            <p className="text-xs text-stone-400">Click New Loan to log what you borrowed from others</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

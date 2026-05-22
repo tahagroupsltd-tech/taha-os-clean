@@ -8,6 +8,7 @@ import { formatMoney, formatDate } from '@/lib/utils'
 import { IndianRupee, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
 import { ProjectValueInput } from '@/components/billing/ProjectValueInput'
 import { MonthSelector } from '@/components/billing/MonthSelector'
+import { PaymentReminderButton } from '@/components/billing/PaymentReminderButton'
 
 export default async function BillingPage({
   searchParams = {},
@@ -114,6 +115,9 @@ export default async function BillingPage({
       lastPaymentDate: lastPayment?.date ?? null,
       lastPaymentAmount: lastPayment ? Number(lastPayment.amount) : 0,
       daysSinceLast,
+      promiseToPayDate: p.promise_to_pay_date ?? null,
+      reminderDate: p.reminder_date ?? null,
+      reminderNote: p.reminder_note ?? null,
     }
   })
 
@@ -239,6 +243,7 @@ export default async function BillingPage({
                       <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Last paid</th>
                       <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Paid (All Time)</th>
                       <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Remaining</th>
+                      <th className="text-center px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Reminder</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-50">
@@ -267,6 +272,16 @@ export default async function BillingPage({
                         <td className="px-5 py-3 text-right font-semibold text-stone-900 whitespace-nowrap">{formatMoney(r.allIncome)}</td>
                         <td className={`px-5 py-3 text-right font-semibold whitespace-nowrap ${r.remainingBalance > 0 ? 'text-amber-600' : 'text-stone-400'}`}>
                           {r.remainingBalance > 0 ? formatMoney(r.remainingBalance) : '₹0'}
+                        </td>
+                        <td className="px-5 py-3 text-center whitespace-nowrap">
+                          <PaymentReminderButton
+                            projectId={r.id}
+                            projectName={r.project}
+                            clientName={r.client?.name}
+                            initialPromiseDate={r.promiseToPayDate}
+                            initialReminderDate={r.reminderDate}
+                            initialReminderNote={r.reminderNote}
+                          />
                         </td>
                       </tr>
                     ))}
