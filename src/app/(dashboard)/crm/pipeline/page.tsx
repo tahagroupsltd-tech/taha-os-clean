@@ -27,6 +27,13 @@ interface Lead {
   source: string
   value: number | null
   notes: string | null
+  niche: string | null
+  phone: string | null
+  instagram_url: string | null
+  youtube_url: string | null
+  facebook_url: string | null
+  website_url: string | null
+  other_links: string | null
   expectedCloseDate: string | null
   contact: { id: string; name: string; email: string | null; phone: string | null } | null
   company: { id: string; name: string } | null
@@ -40,6 +47,13 @@ interface NewLeadForm {
   source: string
   value: string
   notes: string
+  niche: string
+  phone: string
+  instagram_url: string
+  youtube_url: string
+  facebook_url: string
+  website_url: string
+  other_links: string
   expectedCloseDate: string
 }
 
@@ -52,7 +66,9 @@ export default function PipelinePage() {
   const [saving, setSaving] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [form, setForm] = useState<NewLeadForm>({
-    title: '', stage: 'NEW', source: 'OTHER', value: '', notes: '', expectedCloseDate: '',
+    title: '', stage: 'NEW', source: 'OTHER', value: '', notes: '',
+    niche: '', phone: '', instagram_url: '', youtube_url: '',
+    facebook_url: '', website_url: '', other_links: '', expectedCloseDate: '',
   })
 
   useEffect(() => {
@@ -91,6 +107,13 @@ export default function PipelinePage() {
           source: form.source,
           value: form.value ? Number(form.value) : null,
           notes: form.notes || null,
+          niche: form.niche || null,
+          phone: form.phone || null,
+          instagram_url: form.instagram_url || null,
+          youtube_url: form.youtube_url || null,
+          facebook_url: form.facebook_url || null,
+          website_url: form.website_url || null,
+          other_links: form.other_links || null,
           expectedCloseDate: form.expectedCloseDate || null,
         }),
       })
@@ -98,7 +121,11 @@ export default function PipelinePage() {
       if (data.data) {
         setLeads(prev => [data.data, ...prev])
         setShowForm(false)
-        setForm({ title: '', stage: 'NEW', source: 'OTHER', value: '', notes: '', expectedCloseDate: '' })
+        setForm({
+          title: '', stage: 'NEW', source: 'OTHER', value: '', notes: '',
+          niche: '', phone: '', instagram_url: '', youtube_url: '',
+          facebook_url: '', website_url: '', other_links: '', expectedCloseDate: '',
+        })
       }
     } finally { setSaving(false) }
   }
@@ -232,6 +259,13 @@ export default function PipelinePage() {
                           {SOURCE_LABELS[lead.source]}
                         </p>
                       )}
+                      {lead.niche && (
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <span className="text-[9px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100 px-1.5 py-0.5 rounded-full">
+                            {lead.niche}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -261,6 +295,80 @@ export default function PipelinePage() {
                   placeholder="e.g. Social media package for XYZ"
                   className="w-full px-3 py-2 text-sm border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-300"
                 />
+              </div>
+              {/* Niche / Occupation */}
+              <div>
+                <label className="block text-xs font-medium text-stone-700 mb-1">Niche / Occupation</label>
+                <input
+                  value={form.niche}
+                  onChange={e => setForm(f => ({ ...f, niche: e.target.value }))}
+                  placeholder="e.g. Restaurant, Real Estate, Fashion, Fitness Coach…"
+                  className="w-full px-3 py-2 text-sm border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                />
+              </div>
+
+              {/* Contact Number */}
+              <div>
+                <label className="block text-xs font-medium text-stone-700 mb-1">Contact Number</label>
+                <input
+                  type="tel"
+                  value={form.phone}
+                  onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="+91 98765 43210"
+                  className="w-full px-3 py-2 text-sm border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                />
+              </div>
+
+              {/* Social Links */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-600 uppercase tracking-wide mb-2">Social / Source Links</label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-pink-500 w-20 flex-shrink-0">Instagram</span>
+                    <input
+                      value={form.instagram_url}
+                      onChange={e => setForm(f => ({ ...f, instagram_url: e.target.value }))}
+                      placeholder="https://instagram.com/username"
+                      className="flex-1 px-3 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-200"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-red-500 w-20 flex-shrink-0">YouTube</span>
+                    <input
+                      value={form.youtube_url}
+                      onChange={e => setForm(f => ({ ...f, youtube_url: e.target.value }))}
+                      placeholder="https://youtube.com/@channel"
+                      className="flex-1 px-3 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-red-200"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-blue-600 w-20 flex-shrink-0">Facebook</span>
+                    <input
+                      value={form.facebook_url}
+                      onChange={e => setForm(f => ({ ...f, facebook_url: e.target.value }))}
+                      placeholder="https://facebook.com/page"
+                      className="flex-1 px-3 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-stone-500 w-20 flex-shrink-0">Website</span>
+                    <input
+                      value={form.website_url}
+                      onChange={e => setForm(f => ({ ...f, website_url: e.target.value }))}
+                      placeholder="https://theirbusiness.com"
+                      className="flex-1 px-3 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-stone-200"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-violet-500 w-20 flex-shrink-0">Other</span>
+                    <input
+                      value={form.other_links}
+                      onChange={e => setForm(f => ({ ...f, other_links: e.target.value }))}
+                      placeholder="Any other link…"
+                      className="flex-1 px-3 py-1.5 text-xs border border-stone-200 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-200"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -386,6 +494,20 @@ export default function PipelinePage() {
                     <p className="font-medium text-stone-800">{SOURCE_LABELS[selectedLead.source] ?? selectedLead.source}</p>
                   </div>
                 )}
+                {selectedLead.niche && (
+                  <div>
+                    <p className="text-stone-400 mb-0.5">Niche / Occupation</p>
+                    <span className="inline-block text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full">
+                      {selectedLead.niche}
+                    </span>
+                  </div>
+                )}
+                {selectedLead.phone && (
+                  <div>
+                    <p className="text-stone-400 mb-0.5">Contact Number</p>
+                    <a href={`tel:${selectedLead.phone}`} className="font-medium text-stone-800 hover:text-indigo-600">{selectedLead.phone}</a>
+                  </div>
+                )}
                 {selectedLead.expectedCloseDate && (
                   <div>
                     <p className="text-stone-400 mb-0.5">Expected Close</p>
@@ -399,6 +521,50 @@ export default function PipelinePage() {
                 <div>
                   <p className="text-xs text-stone-400 mb-1">Notes</p>
                   <p className="text-sm text-stone-700 bg-stone-50 rounded-lg p-3">{selectedLead.notes}</p>
+                </div>
+              )}
+
+              {/* Social Links in detail drawer */}
+              {(selectedLead.instagram_url || selectedLead.youtube_url || selectedLead.facebook_url || selectedLead.website_url || selectedLead.other_links) && (
+                <div>
+                  <p className="text-xs text-stone-400 mb-2">Social / Source Links</p>
+                  <div className="space-y-1.5">
+                    {selectedLead.instagram_url && (
+                      <a href={selectedLead.instagram_url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 text-xs text-pink-600 hover:text-pink-800 bg-pink-50 border border-pink-100 rounded-lg px-3 py-2 truncate">
+                        <span className="font-bold w-16 flex-shrink-0">Instagram</span>
+                        <span className="truncate">{selectedLead.instagram_url}</span>
+                      </a>
+                    )}
+                    {selectedLead.youtube_url && (
+                      <a href={selectedLead.youtube_url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 text-xs text-red-600 hover:text-red-800 bg-red-50 border border-red-100 rounded-lg px-3 py-2 truncate">
+                        <span className="font-bold w-16 flex-shrink-0">YouTube</span>
+                        <span className="truncate">{selectedLead.youtube_url}</span>
+                      </a>
+                    )}
+                    {selectedLead.facebook_url && (
+                      <a href={selectedLead.facebook_url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-800 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 truncate">
+                        <span className="font-bold w-16 flex-shrink-0">Facebook</span>
+                        <span className="truncate">{selectedLead.facebook_url}</span>
+                      </a>
+                    )}
+                    {selectedLead.website_url && (
+                      <a href={selectedLead.website_url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 text-xs text-stone-600 hover:text-stone-800 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 truncate">
+                        <span className="font-bold w-16 flex-shrink-0">Website</span>
+                        <span className="truncate">{selectedLead.website_url}</span>
+                      </a>
+                    )}
+                    {selectedLead.other_links && (
+                      <a href={selectedLead.other_links} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 text-xs text-violet-600 hover:text-violet-800 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2 truncate">
+                        <span className="font-bold w-16 flex-shrink-0">Other</span>
+                        <span className="truncate">{selectedLead.other_links}</span>
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
 

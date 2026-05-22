@@ -24,6 +24,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (body.assignedToId !== undefined) patch.assigned_to_id = body.assignedToId || null
     if (body.projectId !== undefined) patch.project_id = body.projectId || null
     if (body.notes !== undefined) patch.notes = body.notes || null
+    if (body.niche !== undefined) patch.niche = body.niche || null
+    if (body.phone !== undefined) patch.phone = body.phone || null
+    if (body.instagram_url !== undefined) patch.instagram_url = body.instagram_url || null
+    if (body.youtube_url !== undefined) patch.youtube_url = body.youtube_url || null
+    if (body.facebook_url !== undefined) patch.facebook_url = body.facebook_url || null
+    if (body.website_url !== undefined) patch.website_url = body.website_url || null
+    if (body.other_links !== undefined) patch.other_links = body.other_links || null
     if (body.expectedCloseDate !== undefined) {
       patch.expected_close_date = body.expectedCloseDate ? new Date(body.expectedCloseDate).toISOString() : null
     }
