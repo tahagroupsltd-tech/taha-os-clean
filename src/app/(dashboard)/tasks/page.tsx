@@ -407,7 +407,22 @@ function ListView({ tasks, canEdit, onEdit, onDelete, isAdmin, now }: {
                       {task.priority}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-stone-500 whitespace-nowrap">{task.assignedTo?.name ?? '—'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {task.assignedTo ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                          <span className="text-[10px] font-bold text-indigo-700">
+                            {task.assignedTo.name[0].toUpperCase()}
+                          </span>
+                        </div>
+                        <span className="text-stone-700 font-medium">{task.assignedTo.name}</span>
+                      </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-500 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+                        ⚠ Unassigned
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {task.deadline ? (() => {
                       const colors = getTaskUrgencyColors(task.deadline, task.status, now)
@@ -485,7 +500,8 @@ function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, sh
         )}
       </div>
 
-      <div className="flex items-center justify-between mt-1">
+      {/* Assignee row — always visible */}
+      <div className="flex items-center justify-between mt-2">
         <div className="flex items-center gap-1">
           {task.deadline && colors.isOverdue && <AlertCircle size={11} className="text-red-400 animate-pulse" />}
           <span className={cn("text-[10px]", colors.textClasses)}>
@@ -499,12 +515,21 @@ function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, sh
             )}
           </span>
         </div>
-        {task.assignedTo && (
-          <div className="w-5 h-5 rounded-full bg-stone-200 flex items-center justify-center">
-            <span className="text-[9px] font-bold text-stone-600">
-              {task.assignedTo.name[0].toUpperCase()}
+        {task.assignedTo ? (
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+              <span className="text-[9px] font-bold text-indigo-700">
+                {task.assignedTo.name[0].toUpperCase()}
+              </span>
+            </div>
+            <span className="text-[10px] font-semibold text-stone-600 max-w-[90px] truncate">
+              {task.assignedTo.name.split(' ')[0]}
             </span>
           </div>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-[9px] font-bold text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-full">
+            ⚠ Unassigned
+          </span>
         )}
       </div>
 
