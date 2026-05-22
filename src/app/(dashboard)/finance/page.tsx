@@ -437,12 +437,17 @@ export default function FinancePage() {
           {projects.length > 0 && (
             <div className="col-span-2">
               <Select
-                label="Project (optional)"
+                label={form.type === 'INCOME' ? '🔗 Link to Project (shows in Client Billing)' : 'Project (optional)'}
                 placeholder="No project"
                 options={projects.map((p) => ({ value: p.id, label: p.name }))}
                 value={form.projectId}
                 onChange={(e) => setForm({ ...form, projectId: e.target.value })}
               />
+              {form.type === 'INCOME' && !form.projectId && (
+                <p className="text-[11px] text-amber-600 mt-1">
+                  ⚠️ Without a project, this income won&apos;t appear in Client Billing
+                </p>
+              )}
             </div>
           )}
           <div className="col-span-2">

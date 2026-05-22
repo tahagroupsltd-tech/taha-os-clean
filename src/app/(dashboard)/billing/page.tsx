@@ -53,20 +53,26 @@ export default async function BillingPage({
     order: 'date.desc',
   }).catch(() => [] as any[])
 
-  // Group transactions by project
+  // Group transactions by project (keep unlinked for summary)
   const txByProject = new Map<string, any[]>()
+  let unlinkedIncomeThisMonth = 0
+  let unlinkedIncomeAllTime = 0
   for (const t of allTransactions) {
-    if (!t.projectId) continue
+    if (!t.projectId) {
+      // Unlinked — count in summary totals
+      const d = new Date(t.date)
+      if (d >= startOfMonth && d < startOfNextMonth) unlinkedIncomeThisMonth += Number(t.amount)
+      unlinkedIncomeAllTime += Number(t.amount)
+      continue
+    }
     const arr = txByProject.get(t.projectId) ?? []
     arr.push(t)
     txByProject.set(t.projectId, arr)
   }
 
-  // Filter projects by target month: startDate if present, else createdAt
-  const projects = projectsRaw.filter((p: any) => {
-    const projectDate = p.startDate ? new Date(p.startDate) : new Date(p.createdAt)
-    return projectDate >= startOfMonth && projectDate < startOfNextMonth
-  })
+  // Show ALL active/paused projects — month filter only affects "this month" income column
+  // (previously projects were hidden if they started outside the selected month)
+  const projects = projectsRaw
 
   // Compute per-project metrics for filtered projects
   const rows = projects.map((p: any) => {
@@ -166,6 +172,7 @@ export default async function BillingPage({
   
   const paidThisMonthCount = rows.filter((r) => r.status === 'paid_this_month').length
   const totalOutstanding = rows.reduce((s, r) => s + r.remainingBalance, 0)
+  const unlinkedCount = allTransactions.filter((t: any) => !t.projectId).length
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -213,7 +220,21 @@ export default async function BillingPage({
           </div>
         </div>
 
-        {/* By client */}
+        {/* Unlinked income warning */}
+        {unlinkedCount > 0 && (
+          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <AlertCircle size={15} className="text-amber-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-amber-800">
+                {unlinkedCount} income transaction{unlinkedCount > 1 ? 's' : ''} in Finance not linked to any project
+              </p>
+              <p className="text-[11px] text-amber-600 mt-0.5">
+                {formatMoney(unlinkedIncomeAllTime)} total unlinked income ({formatMoney(unlinkedIncomeThisMonth)} this month) — these won&apos;t appear in project rows below.
+                Go to <a href="/finance" className="underline font-semibold">Finance → Transactions</a> and link each one to a project.
+              </p>
+            </div>
+          </div>
+        )}
         {[...byClient.entries()].map(([clientId, projectRows]) => {
           const clientName = projectRows[0].client?.name
           const clientTotal = projectRows.reduce((s, r) => s + r.allIncome, 0)
