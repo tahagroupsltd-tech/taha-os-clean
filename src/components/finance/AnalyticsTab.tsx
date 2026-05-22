@@ -391,11 +391,11 @@ export function AnalyticsTab() {
             <div className="w-7 h-7 rounded-md bg-orange-100 flex items-center justify-center">
               <HandCoins size={14} className="text-orange-700" />
             </div>
-            <p className="text-[10px] font-semibold text-orange-700 uppercase tracking-wide">Loans Pending</p>
+            <p className="text-[10px] font-semibold text-orange-700 uppercase tracking-wide">Loans — To Repay</p>
           </div>
           <p className="text-xl font-bold text-orange-800">{formatMoney(loanPending)}</p>
           {loans.length > 0 && (
-            <p className="text-[9px] text-orange-500 mt-0.5">{loans.filter(l => l.status === 'PENDING').length} of {loans.length} unpaid</p>
+            <p className="text-[9px] text-orange-500 mt-0.5">{loans.filter(l => l.status === 'PENDING').length} of {loans.length} not yet repaid</p>
           )}
         </div>
       </div>
@@ -481,12 +481,12 @@ export function AnalyticsTab() {
               </div>
               <div>
                 <p className="text-xs font-semibold text-stone-900">Loans Overview</p>
-                <p className="text-[10px] text-stone-400">Money lent out — pending vs recovered</p>
+                <p className="text-[10px] text-stone-400">Money borrowed — pending repayment vs paid back</p>
               </div>
             </div>
             <div className="flex items-center gap-4 text-right">
               <div>
-                <p className="text-[9px] text-stone-400 uppercase tracking-wide">Total Lent</p>
+                <p className="text-[9px] text-stone-400 uppercase tracking-wide">Total Borrowed</p>
                 <p className="text-sm font-bold text-stone-800">{formatMoney(loanTotal)}</p>
               </div>
             </div>
@@ -496,8 +496,8 @@ export function AnalyticsTab() {
           {loanTotal > 0 && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-orange-600 font-semibold">Pending — {formatMoney(loanPending)}</span>
-                <span className="text-[10px] text-emerald-600 font-semibold">Recovered — {formatMoney(loanPaid)}</span>
+                <span className="text-[10px] text-orange-600 font-semibold">To Repay — {formatMoney(loanPending)}</span>
+                <span className="text-[10px] text-emerald-600 font-semibold">Repaid — {formatMoney(loanPaid)}</span>
               </div>
               <div className="w-full h-3 bg-stone-100 rounded-full overflow-hidden flex">
                 <div
@@ -552,7 +552,7 @@ export function AnalyticsTab() {
                     <span className={`text-[9px] font-bold uppercase tracking-wide ${
                       isOverdue ? 'text-red-500' : isPending ? 'text-orange-500' : 'text-emerald-600'
                     }`}>
-                      {isOverdue ? 'Overdue' : isPending ? 'Pending' : 'Paid'}
+                      {isOverdue ? 'Overdue' : isPending ? 'To Repay' : 'Repaid'}
                     </span>
                   </div>
                 </div>
