@@ -38,204 +38,111 @@ const SOP_LABELS: Record<number, string> = {
   7: 'L7 · Post-Production',
 }
 
-interface DriveFile {
-  id: string; name: string; mimeType: string
-  size?: string | null; modifiedTime?: string | null
-  webViewLink?: string | null; isFolder: boolean
-}
 interface ProjectDetail extends Project { tasks: Task[]; content: Content[] }
 
 function DrivePanel({ projectId, driveFolder, canEdit }: {
   projectId: string; driveFolder: string | null | undefined; canEdit: boolean
 }) {
-  const [files, setFiles] = useState<DriveFile[]>([])
-  const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [folderUrl, setFolderUrl] = useState(driveFolder ?? '')
   const [editingUrl, setEditingUrl] = useState(!driveFolder)
   const [savingUrl, setSavingUrl] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const extractFolderId = (url: string) => url.match(/\/folders\/([a-zA-Z0-9_-]+)/)?.[1] ?? null
-  const folderId = extractFolderId(folderUrl)
-
-  const loadFiles = useCallback(async () => {
-    if (!folderId) return
-    setLoading(true); setError(null)
-    try {
-      const res = await fetch(`/api/drive/files?folderId=${folderId}`)
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error === 'NO_TOKEN' || json.error === 'NO_DRIVE_SCOPE' ? 'reconnect' : (json.error ?? 'Failed to load files'))
-        return
-      }
-      setFiles(json.data ?? [])
-    } catch { setError('Network error') } finally { setLoading(false) }
-  }, [folderId])
-
-  useEffect(() => { if (folderId) loadFiles() }, [folderId, loadFiles])
 
   const saveUrl = async () => {
-    if (!folderUrl.trim()) return
     setSavingUrl(true)
     try {
       const res = await fetch(`/api/projects/${projectId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ driveFolder: folderUrl.trim() }),
+        body: JSON.stringify({ driveFolder: folderUrl.trim() || null }),
       })
       if (!res.ok) throw new Error()
-      toast.success('Drive folder linked'); setEditingUrl(false)
-    } catch { toast.error('Could not save folder URL') } finally { setSavingUrl(false) }
-  }
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !folderId) return
-    setUploading(true)
-    try {
-      const form = new FormData()
-      form.append('folderId', folderId); form.append('file', file)
-      const res = await fetch('/api/drive/upload', { method: 'POST', body: form })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Upload failed')
-      toast.success(`${file.name} uploaded`); loadFiles()
-    } catch (err: any) { toast.error(err.message ?? 'Upload failed') }
-    finally { setUploading(false); if (fileInputRef.current) fileInputRef.current.value = '' }
-  }
-
-  const fileIcon = (mimeType: string, isFolder: boolean) => {
-    if (isFolder) return <Folder size={13} className="text-amber-500 flex-shrink-0" />
-    if (mimeType.includes('video')) return <Film size={13} className="text-blue-500 flex-shrink-0" />
-    if (mimeType.includes('image')) return <Image size={13} className="text-green-500 flex-shrink-0" />
-    if (mimeType.includes('pdf') || mimeType.includes('document'))
-      return <FileText size={13} className="text-red-400 flex-shrink-0" />
-    return <File size={13} className="text-stone-400 flex-shrink-0" />
-  }
-
-  const fmtSize = (b?: string | null) => {
-    if (!b) return ''; const n = parseInt(b)
-    return n > 1_048_576 ? `${(n/1_048_576).toFixed(1)} MB` : n > 1024 ? `${(n/1024).toFixed(0)} KB` : `${n} B`
+      toast.success(folderUrl.trim() ? 'Drive folder link updated' : 'Drive folder link removed')
+      setEditingUrl(!folderUrl.trim())
+    } catch {
+      toast.error('Could not save folder URL')
+    } finally {
+      setSavingUrl(false)
+    }
   }
 
   return (
     <div className="bg-white rounded-lg border border-stone-100 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
         <p className="text-xs font-semibold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
-          <FolderOpen size={13} /> Drive Files
+          <FolderOpen size={13} /> Drive Folder Link
         </p>
-        <div className="flex items-center gap-2">
-          {folderId && (
-            <>
-              <a href={folderUrl} target="_blank" rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 transition-colors">
-                <ExternalLink size={11} /> Open folder
-              </a>
-              <button onClick={loadFiles} className="text-stone-400 hover:text-stone-700 transition-colors" title="Refresh">
-                <RefreshCw size={12} />
-              </button>
-            </>
-          )}
-          {canEdit && folderId && !editingUrl && (
-            <button onClick={() => setEditingUrl(true)} className="text-stone-400 hover:text-stone-700 transition-colors" title="Change folder">
-              <Link2 size={12} />
-            </button>
-          )}
-        </div>
+        {!editingUrl && folderUrl && canEdit && (
+          <button
+            onClick={() => setEditingUrl(true)}
+            className="inline-flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 transition-colors"
+            title="Edit folder link"
+          >
+            <Link2 size={12} /> Edit Link
+          </button>
+        )}
       </div>
 
       <div className="p-4">
-        {(editingUrl || !folderId) && canEdit && (
-          <div className="flex items-center gap-2 mb-4">
-            <input type="text" value={folderUrl} onChange={(e) => setFolderUrl(e.target.value)}
-              placeholder="Paste Google Drive folder URL…"
-              className="flex-1 text-xs border border-stone-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-stone-400 bg-stone-50" />
-            <button onClick={saveUrl} disabled={savingUrl || !folderUrl.trim()}
-              className="text-xs px-3 py-2 bg-stone-900 text-white rounded-md hover:bg-stone-700 disabled:opacity-40 transition-colors">
-              {savingUrl ? 'Saving…' : 'Link'}
-            </button>
-            {folderId && <button onClick={() => setEditingUrl(false)} className="text-stone-400 hover:text-stone-700"><X size={14} /></button>}
-          </div>
-        )}
-
-        {!folderId && (
-          <p className="text-xs text-stone-400 text-center py-6">
-            {canEdit ? 'Paste a Google Drive folder URL above to browse and upload files.' : 'No Drive folder linked yet.'}
-          </p>
-        )}
-
-        {error === 'reconnect' && (
-          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-md mb-3">
-            <AlertCircle size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-xs font-medium text-amber-800">Drive access required</p>
-              <p className="text-[11px] text-amber-600 mt-0.5">
-                Your Google account needs Drive permission.{' '}
-                <a href="/api/auth/google-calendar" className="underline font-medium">Reconnect Google in Settings</a>{' '}
-                to enable file browsing and uploads.
-              </p>
-            </div>
-          </div>
-        )}
-        {error && error !== 'reconnect' && <p className="text-xs text-red-500 mb-3">{error}</p>}
-
-        {loading && (
+        {editingUrl ? (
           <div className="space-y-2">
-            {[1,2,3].map(i => (
-              <div key={i} className="flex items-center gap-2 py-1.5">
-                <Skeleton className="h-3.5 w-3.5 rounded" />
-                <Skeleton className="h-3 flex-1" />
-                <Skeleton className="h-3 w-16" />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!loading && folderId && !error && (
-          <>
-            {files.length === 0
-              ? <p className="text-xs text-stone-400 text-center py-4">Folder is empty</p>
-              : (
-                <div className="divide-y divide-stone-50 -mx-4 mb-3">
-                  {files.map(f => (
-                    <div key={f.id} className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-stone-50/60 group">
-                      {fileIcon(f.mimeType, f.isFolder)}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-stone-800 truncate">{f.name}</p>
-                        {f.modifiedTime && (
-                          <p className="text-[10px] text-stone-400 mt-0.5">
-                            {new Date(f.modifiedTime).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}
-                            {f.size ? ` · ${fmtSize(f.size)}` : ''}
-                          </p>
-                        )}
-                      </div>
-                      {f.webViewLink && (
-                        <a href={f.webViewLink} target="_blank" rel="noreferrer"
-                          className="opacity-0 group-hover:opacity-100 text-stone-400 hover:text-stone-700 transition-all" title="Open in Drive">
-                          <ExternalLink size={12} />
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )
-            }
-            <div className="flex items-center justify-between pt-1">
-              <p className="text-[10px] text-stone-400">{files.length} item{files.length !== 1 ? 's' : ''}</p>
-              <label className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md cursor-pointer transition-colors ${
-                uploading ? 'bg-stone-100 text-stone-400 cursor-not-allowed' : 'bg-stone-900 text-white hover:bg-stone-700'}`}>
-                <Upload size={11} />
-                {uploading ? 'Uploading…' : 'Upload file'}
-                <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
-              </label>
+            <p className="text-[11px] font-medium text-stone-500 uppercase tracking-wide">Link a Google Drive Folder or Resource</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={folderUrl}
+                onChange={(e) => setFolderUrl(e.target.value)}
+                placeholder="Paste Google Drive URL here..."
+                className="flex-1 text-xs border border-stone-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-stone-400 bg-stone-50"
+              />
+              <button
+                onClick={saveUrl}
+                disabled={savingUrl}
+                className="text-xs px-3 py-2 bg-stone-900 text-white rounded-md hover:bg-stone-700 disabled:opacity-40 transition-colors"
+              >
+                {savingUrl ? 'Saving…' : 'Save'}
+              </button>
+              {driveFolder && (
+                <button
+                  onClick={() => {
+                    setFolderUrl(driveFolder)
+                    setEditingUrl(false)
+                  }}
+                  className="text-stone-400 hover:text-stone-700"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
-          </>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-4 p-3.5 bg-stone-50/50 rounded-lg border border-stone-100/80">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider">Drive Folder Address</p>
+              <a
+                href={folderUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-blue-600 hover:underline font-medium truncate block mt-1"
+                title={folderUrl}
+              >
+                {folderUrl}
+              </a>
+            </div>
+            <a
+              href={folderUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs bg-stone-900 hover:bg-stone-700 text-white px-3.5 py-2 rounded-md font-semibold transition-all shadow-sm flex-shrink-0"
+            >
+              <ExternalLink size={12} /> Open Folder
+            </a>
+          </div>
         )}
       </div>
     </div>
   )
 }
+
 
 function fmtMins(m: number) {
   if (m < 60) return `${m}m`
