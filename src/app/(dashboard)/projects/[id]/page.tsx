@@ -17,7 +17,7 @@ import type { Project, ProjectStatus, Task, Content, TaskStatus, ContentStatus, 
 import {
   ArrowLeft, CheckSquare, FileVideo, Calendar, User as UserIcon,
   FolderOpen, CalendarRange, BookMarked, Upload, ExternalLink,
-  FileText, Film, Image, File, Folder, RefreshCw, Link2, X, AlertCircle, Clock, Trash,
+  FileText, Film, Image, File, Folder, RefreshCw, Link2, X, AlertCircle, Clock, Trash, Pencil,
   TrendingUp, TrendingDown, IndianRupee, Plus, Wallet,
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -40,102 +40,307 @@ const SOP_LABELS: Record<number, string> = {
 
 interface ProjectDetail extends Project { tasks: Task[]; content: Content[] }
 
+interface DriveLink {
+  id: string
+  label: string
+  url: string
+}
+
+function parseDriveLinks(raw: string | null | undefined): DriveLink[] {
+  if (!raw) return []
+  const trimmed = raw.trim()
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) {
+        return parsed.map((item: any, index: number) => ({
+          id: item.id || `link-${index}-${Date.now()}`,
+          label: item.label || 'Google Drive Folder',
+          url: item.url || '',
+        })).filter(item => item.url)
+      }
+    } catch (e) {
+      // Fallback
+    }
+  }
+  // Single link fallback
+  return [{
+    id: 'default',
+    label: 'Main Drive Folder',
+    url: trimmed
+  }]
+}
+
 function DrivePanel({ projectId, driveFolder, canEdit }: {
   projectId: string; driveFolder: string | null | undefined; canEdit: boolean
 }) {
-  const [folderUrl, setFolderUrl] = useState(driveFolder ?? '')
-  const [editingUrl, setEditingUrl] = useState(!driveFolder)
-  const [savingUrl, setSavingUrl] = useState(false)
+  const [links, setLinks] = useState<DriveLink[]>(() => parseDriveLinks(driveFolder))
+  const [isAdding, setIsAdding] = useState(false)
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  const saveUrl = async () => {
-    setSavingUrl(true)
+  // Inputs for Add form
+  const [addLabel, setAddLabel] = useState('')
+  const [addUrl, setAddUrl] = useState('')
+
+  // Inputs for Edit form
+  const [editLabel, setEditLabel] = useState('')
+  const [editUrl, setEditUrl] = useState('')
+
+  useEffect(() => {
+    setLinks(parseDriveLinks(driveFolder))
+  }, [driveFolder])
+
+  const handleSave = async (updatedLinks: DriveLink[]) => {
+    setSaving(true)
     try {
+      const stringified = updatedLinks.length > 0 ? JSON.stringify(updatedLinks) : null
       const res = await fetch(`/api/projects/${projectId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ driveFolder: folderUrl.trim() || null }),
+        body: JSON.stringify({ driveFolder: stringified }),
       })
       if (!res.ok) throw new Error()
-      toast.success(folderUrl.trim() ? 'Drive folder link updated' : 'Drive folder link removed')
-      setEditingUrl(!folderUrl.trim())
+      setLinks(updatedLinks)
+      toast.success('Drive links updated')
+      return true
     } catch {
-      toast.error('Could not save folder URL')
+      toast.error('Could not save Drive links')
+      return false
     } finally {
-      setSavingUrl(false)
+      setSaving(false)
     }
+  }
+
+  const startAdd = () => {
+    setAddLabel('')
+    setAddUrl('')
+    setIsAdding(true)
+    setEditingLinkId(null)
+  }
+
+  const startEdit = (link: DriveLink) => {
+    setEditLabel(link.label)
+    setEditUrl(link.url)
+    setEditingLinkId(link.id)
+    setIsAdding(false)
+  }
+
+  const onAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!addUrl.trim()) {
+      toast.error('URL is required')
+      return
+    }
+    const cleanUrl = addUrl.trim()
+    const newLink: DriveLink = {
+      id: Math.random().toString(36).substring(2, 9),
+      label: addLabel.trim() || 'Drive Link',
+      url: cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`
+    }
+    const success = await handleSave([...links, newLink])
+    if (success) {
+      setIsAdding(false)
+      setAddLabel('')
+      setAddUrl('')
+    }
+  }
+
+  const onEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editUrl.trim()) {
+      toast.error('URL is required')
+      return
+    }
+    const cleanUrl = editUrl.trim()
+    const updated = links.map(l => l.id === editingLinkId ? {
+      ...l,
+      label: editLabel.trim() || 'Drive Link',
+      url: cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`
+    } : l)
+    const success = await handleSave(updated)
+    if (success) {
+      setEditingLinkId(null)
+    }
+  }
+
+  const onDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this link?')) return
+    const updated = links.filter(l => l.id !== id)
+    await handleSave(updated)
   }
 
   return (
     <div className="bg-white rounded-lg border border-stone-100 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
         <p className="text-xs font-semibold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
-          <FolderOpen size={13} /> Drive Folder Link
+          <FolderOpen size={13} className="text-stone-500" /> Drive Folders & Links
         </p>
-        {!editingUrl && folderUrl && canEdit && (
+        {canEdit && !isAdding && !editingLinkId && (
           <button
-            onClick={() => setEditingUrl(true)}
-            className="inline-flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 transition-colors"
-            title="Edit folder link"
+            onClick={startAdd}
+            className="inline-flex items-center gap-1 text-[10px] bg-stone-900 hover:bg-stone-700 text-white px-2.5 py-1 rounded transition-colors font-medium animate-in fade-in duration-200"
           >
-            <Link2 size={12} /> Edit Link
+            <Plus size={10} /> Add Link
           </button>
         )}
       </div>
 
-      <div className="p-4">
-        {editingUrl ? (
-          <div className="space-y-2">
-            <p className="text-[11px] font-medium text-stone-500 uppercase tracking-wide">Link a Google Drive Folder or Resource</p>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={folderUrl}
-                onChange={(e) => setFolderUrl(e.target.value)}
-                placeholder="Paste Google Drive URL here..."
-                className="flex-1 text-xs border border-stone-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-stone-400 bg-stone-50"
-              />
+      <div className="p-4 space-y-3">
+        {/* Add Link Form */}
+        {isAdding && (
+          <form onSubmit={onAddSubmit} className="p-3.5 bg-stone-50 border border-stone-100 rounded-lg space-y-3 animate-in slide-in-from-top duration-200">
+            <p className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Add Drive Link</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="text-[9px] uppercase tracking-wider font-semibold text-stone-400 block">Label</label>
+                <input
+                  type="text"
+                  value={addLabel}
+                  onChange={(e) => setAddLabel(e.target.value)}
+                  placeholder="e.g. Main Folder, Video Assets"
+                  className="w-full text-xs border border-stone-200 rounded px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-stone-400 bg-white"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] uppercase tracking-wider font-semibold text-stone-400 block">Google Drive URL</label>
+                <input
+                  type="text"
+                  value={addUrl}
+                  onChange={(e) => setAddUrl(e.target.value)}
+                  placeholder="https://drive.google.com/..."
+                  className="w-full text-xs border border-stone-200 rounded px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-stone-400 bg-white"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-1.5">
               <button
-                onClick={saveUrl}
-                disabled={savingUrl}
-                className="text-xs px-3 py-2 bg-stone-900 text-white rounded-md hover:bg-stone-700 disabled:opacity-40 transition-colors"
+                type="button"
+                onClick={() => setIsAdding(false)}
+                className="text-[11px] px-2.5 py-1.5 text-stone-500 hover:text-stone-700 font-medium"
               >
-                {savingUrl ? 'Saving…' : 'Save'}
+                Cancel
               </button>
-              {driveFolder && (
-                <button
-                  onClick={() => {
-                    setFolderUrl(driveFolder)
-                    setEditingUrl(false)
-                  }}
-                  className="text-stone-400 hover:text-stone-700"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between gap-4 p-3.5 bg-stone-50/50 rounded-lg border border-stone-100/80">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider">Drive Folder Address</p>
-              <a
-                href={folderUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-blue-600 hover:underline font-medium truncate block mt-1"
-                title={folderUrl}
+              <button
+                type="submit"
+                disabled={saving}
+                className="text-[11px] px-3.5 py-1.5 bg-stone-900 text-white rounded hover:bg-stone-700 disabled:opacity-40 transition-colors font-semibold"
               >
-                {folderUrl}
-              </a>
+                {saving ? 'Adding...' : 'Add Link'}
+              </button>
             </div>
-            <a
-              href={folderUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs bg-stone-900 hover:bg-stone-700 text-white px-3.5 py-2 rounded-md font-semibold transition-all shadow-sm flex-shrink-0"
-            >
-              <ExternalLink size={12} /> Open Folder
-            </a>
+          </form>
+        )}
+
+        {/* Links List */}
+        {links.length === 0 && !isAdding ? (
+          <p className="text-xs text-stone-400 text-center py-6">
+            {canEdit ? 'Click "Add Link" above to add Google Drive folder links.' : 'No Drive links attached.'}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {links.map((link) => {
+              const isEditing = editingLinkId === link.id
+
+              if (isEditing) {
+                return (
+                  <form key={link.id} onSubmit={onEditSubmit} className="p-3.5 bg-stone-50 border border-stone-100 rounded-lg space-y-3">
+                    <p className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider">Edit Link</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[9px] uppercase tracking-wider font-semibold text-stone-400 block">Label</label>
+                        <input
+                          type="text"
+                          value={editLabel}
+                          onChange={(e) => setEditLabel(e.target.value)}
+                          placeholder="Label"
+                          className="w-full text-xs border border-stone-200 rounded px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-stone-400 bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] uppercase tracking-wider font-semibold text-stone-400 block">Google Drive URL</label>
+                        <input
+                          type="text"
+                          value={editUrl}
+                          onChange={(e) => setEditUrl(e.target.value)}
+                          placeholder="URL"
+                          className="w-full text-xs border border-stone-200 rounded px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-stone-400 bg-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setEditingLinkId(null)}
+                        className="text-[11px] px-2.5 py-1.5 text-stone-500 hover:text-stone-700 font-medium"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={saving}
+                        className="text-[11px] px-3.5 py-1.5 bg-stone-900 text-white rounded hover:bg-stone-700 disabled:opacity-40 transition-colors font-semibold"
+                      >
+                        {saving ? 'Saving...' : 'Save Link'}
+                      </button>
+                    </div>
+                  </form>
+                )
+              }
+
+              return (
+                <div
+                  key={link.id}
+                  className="flex items-center justify-between gap-4 p-3 bg-stone-50/50 hover:bg-stone-50 rounded-lg border border-stone-100 hover:border-stone-200/80 transition-all group"
+                >
+                  <div className="min-w-0 flex-1 flex items-start gap-2.5">
+                    <div className="p-1.5 bg-blue-50 text-blue-600 rounded mt-0.5 flex-shrink-0">
+                      <Link2 size={13} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-stone-700 truncate">{link.label}</p>
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-blue-600 hover:underline font-medium truncate block mt-0.5"
+                        title={link.url}
+                      >
+                        {link.url}
+                      </a>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {canEdit && (
+                      <>
+                        <button
+                          onClick={() => startEdit(link)}
+                          className="p-1 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                        <button
+                          onClick={() => onDelete(link.id)}
+                          className="p-1 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          title="Delete"
+                        >
+                          <Trash size={11} />
+                        </button>
+                      </>
+                    )}
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] bg-stone-900 hover:bg-stone-700 text-white px-2.5 py-1.5 rounded transition-all font-semibold shadow-xs"
+                    >
+                      <ExternalLink size={10} /> Open
+                    </a>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
