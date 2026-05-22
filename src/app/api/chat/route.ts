@@ -62,6 +62,8 @@ async function handleChat(req: NextRequest) {
   const todayIST = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date())
   // en-CA gives YYYY-MM-DD format
 
+  const isEmployee = user.role === 'EMPLOYEE' || ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
+
   const systemPrompt = `You are an assistant inside Taha Media OS, an internal ops platform for a content/marketing agency.
 
 You help the logged-in user create and manage tasks, content items, calendar events, projects, team users, and CRM records (leads, contacts, companies, deals) — by calling the available tools.
@@ -79,7 +81,7 @@ Rules:
 - If a tool returns an error, explain the error in plain language and stop. Do not retry the same tool with the same args.
 - Google Calendar sync: when the user creates an event or task, it is automatically synced to their Google Calendar if they have connected it in Settings. Do NOT mention Google Calendar errors or database sync issues — just confirm what was created. If the user explicitly asks about Google Calendar, tell them to check Settings → Integrations to connect it.
 - CRM notes: "lead" → use CRM lead tools. "contact" or "client contact" → use CRM contact tools. "company" or "client company" → use CRM company tools. "deal" → use CRM deal tools.
-- Permissions: ${user.role === 'CLIENT' ? 'You are a client. You can only view your own projects.' : user.role === 'EMPLOYEE' ? 'You are an employee. You can create tasks and content but not projects, users, or finance.' : user.role === 'MANAGER' ? 'You are a manager. You can do everything except finance and password resets.' : 'You are the founder. You can do anything.'}
+- Permissions: ${user.role === 'CLIENT' ? 'You are a client. You can only view your own projects.' : isEmployee ? 'You are an employee. You can create tasks and content but not projects, users, or finance.' : user.role === 'MANAGER' ? 'You are a manager. You can do everything except finance and password resets.' : 'You are the founder. You can do anything.'}
 - Never invent ids. Always look them up first.`
 
   const messages: ChatMsg[] = [

@@ -6,13 +6,36 @@ import { TopBar } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/Badge'
 import { formatMoney, formatDate } from '@/lib/utils'
 import { IndianRupee, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
+import { ProjectValueInput } from '@/components/billing/ProjectValueInput'
+import { MonthSelector } from '@/components/billing/MonthSelector'
 
-export default async function BillingPage() {
+export default async function BillingPage({
+  searchParams = {},
+}: {
+  searchParams?: { month?: string }
+}) {
   const user = await getServerUser()
   if (!user) return null
   if (user.role !== 'ADMIN') redirect('/overview')
 
-  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  const now = new Date()
+  let year = now.getFullYear()
+  let month = now.getMonth() // 0-indexed
+
+  if (searchParams?.month) {
+    const parts = searchParams.month.split('-')
+    if (parts.length === 2) {
+      const y = parseInt(parts[0], 10)
+      const m = parseInt(parts[1], 10) - 1
+      if (!isNaN(y) && !isNaN(m) && m >= 0 && m < 12) {
+        year = y
+        month = m
+      }
+    }
+  }
+
+  const startOfMonth = new Date(year, month, 1)
+  const startOfNextMonth = new Date(year, month + 1, 1)
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
 
   // All active/paused projects with client info
@@ -38,12 +61,21 @@ export default async function BillingPage() {
     txByProject.set(t.projectId, arr)
   }
 
-  // Compute per-project metrics
-  const rows = projectsRaw.map((p: any) => {
+  // Filter projects by target month: startDate if present, else createdAt
+  const projects = projectsRaw.filter((p: any) => {
+    const projectDate = p.startDate ? new Date(p.startDate) : new Date(p.createdAt)
+    return projectDate >= startOfMonth && projectDate < startOfNextMonth
+  })
+
+  // Compute per-project metrics for filtered projects
+  const rows = projects.map((p: any) => {
     const transactions = txByProject.get(p.id) ?? []
     const allIncome = transactions.reduce((s: number, t: any) => s + Number(t.amount), 0)
     const thisMonthIncome = transactions
-      .filter((t: any) => new Date(t.date) >= startOfMonth)
+      .filter((t: any) => {
+        const d = new Date(t.date)
+        return d >= startOfMonth && d < startOfNextMonth
+      })
       .reduce((s: number, t: any) => s + Number(t.amount), 0)
     const lastPayment = transactions[0] ?? null
     const daysSinceLast = lastPayment
@@ -58,11 +90,25 @@ export default async function BillingPage() {
           : lastPayment
             ? 'lapsed'
             : 'never'
+    const valNum = p.value ? Number(p.value) : 0
+    const remainingBalance = valNum > 0 ? Math.max(0, valNum - allIncome) : 0
+    const paymentStatus: 'fully_paid' | 'advance' | 'unpaid' | 'no_contract' =
+      valNum === 0
+        ? 'no_contract'
+        : allIncome >= valNum
+          ? 'fully_paid'
+          : allIncome > 0
+            ? 'advance'
+            : 'unpaid'
+
     return {
       id: p.id,
       project: p.name,
       client: p.client ?? null,
       status,
+      value: valNum,
+      remainingBalance,
+      paymentStatus,
       allIncome,
       thisMonthIncome,
       lastPaymentDate: lastPayment?.date ?? null,
@@ -84,18 +130,46 @@ export default async function BillingPage() {
     }
   }
 
-  const totalIncomeAllTime = rows.reduce((s, r) => s + r.allIncome, 0)
-  const totalIncomeThisMonth = rows.reduce((s, r) => s + r.thisMonthIncome, 0)
-  const lapsedCount = rows.filter((r) => r.status === 'lapsed').length
+  // All income in the selected month
+  const totalIncomeThisMonth = allTransactions
+    .filter((t: any) => {
+      const d = new Date(t.date)
+      return d >= startOfMonth && d < startOfNextMonth
+    })
+    .reduce((s: number, t: any) => s + Number(t.amount), 0)
+
+  const totalIncomeAllTime = allTransactions.reduce((s: number, t: any) => s + Number(t.amount), 0)
+  
+  // Calculate lapsed count globally across all active/paused projects in system
+  const globalRows = projectsRaw.map((p: any) => {
+    const transactions = txByProject.get(p.id) ?? []
+    const lastPayment = transactions[0] ?? null
+    const recentActivity = transactions.find((t: any) => new Date(t.date) >= ninetyDaysAgo)
+    const status: 'paid_this_month' | 'recent' | 'lapsed' | 'never' =
+      transactions.some((t: any) => {
+        const d = new Date(t.date)
+        return d >= startOfMonth && d < startOfNextMonth
+      })
+        ? 'paid_this_month'
+        : recentActivity
+          ? 'recent'
+          : lastPayment
+            ? 'lapsed'
+            : 'never'
+    return { status }
+  })
+  const lapsedCount = globalRows.filter((r: any) => r.status === 'lapsed').length
+  
   const paidThisMonthCount = rows.filter((r) => r.status === 'paid_this_month').length
+  const totalOutstanding = rows.reduce((s, r) => s + r.remainingBalance, 0)
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <TopBar title="Client Billing" />
+      <TopBar title="Client Billing" actions={<MonthSelector />} />
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         {/* Summary strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <div className="stat-card">
             <div className="flex items-center gap-2 mb-2">
               <IndianRupee size={14} className="text-stone-500" />
@@ -109,6 +183,13 @@ export default async function BillingPage() {
               <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">Income all time</p>
             </div>
             <p className="text-xl font-bold text-stone-900">{formatMoney(totalIncomeAllTime)}</p>
+          </div>
+          <div className="stat-card">
+            <div className="flex items-center gap-2 mb-2">
+              <IndianRupee size={14} className="text-red-500" />
+              <p className="text-[11px] uppercase tracking-wide text-stone-500 font-medium">Outstanding Balance</p>
+            </div>
+            <p className={`text-xl font-bold ${totalOutstanding > 0 ? 'text-red-600' : 'text-stone-900'}`}>{formatMoney(totalOutstanding)}</p>
           </div>
           <div className="stat-card">
             <div className="flex items-center gap-2 mb-2">
@@ -152,18 +233,26 @@ export default async function BillingPage() {
                   <thead>
                     <tr className="border-b border-stone-50 bg-stone-50/40">
                       <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Project</th>
-                      <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Status</th>
+                      <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Contract Value</th>
+                      <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Recency</th>
+                      <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Payment Status</th>
                       <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Last paid</th>
-                      <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">This month</th>
-                      <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">All time</th>
+                      <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Paid (All Time)</th>
+                      <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Remaining</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-50">
                     {projectRows.map((r) => (
                       <tr key={r.id}>
                         <td className="px-5 py-3 font-medium text-stone-900 whitespace-nowrap">{r.project}</td>
+                        <td className="px-5 py-3 text-right whitespace-nowrap">
+                          <ProjectValueInput projectId={r.id} initialValue={r.value} />
+                        </td>
                         <td className="px-5 py-3 whitespace-nowrap">
                           <StatusPill status={r.status} daysSinceLast={r.daysSinceLast} />
+                        </td>
+                        <td className="px-5 py-3 whitespace-nowrap">
+                          <PaymentStatusPill status={r.paymentStatus} value={r.value} paid={r.allIncome} />
                         </td>
                         <td className="px-5 py-3 text-right text-stone-500 whitespace-nowrap">
                           {r.lastPaymentDate ? (
@@ -175,8 +264,10 @@ export default async function BillingPage() {
                             <span className="text-stone-300">—</span>
                           )}
                         </td>
-                        <td className="px-5 py-3 text-right font-semibold text-stone-900 whitespace-nowrap">{formatMoney(r.thisMonthIncome)}</td>
-                        <td className="px-5 py-3 text-right text-stone-700 whitespace-nowrap">{formatMoney(r.allIncome)}</td>
+                        <td className="px-5 py-3 text-right font-semibold text-stone-900 whitespace-nowrap">{formatMoney(r.allIncome)}</td>
+                        <td className={`px-5 py-3 text-right font-semibold whitespace-nowrap ${r.remainingBalance > 0 ? 'text-amber-600' : 'text-stone-400'}`}>
+                          {r.remainingBalance > 0 ? formatMoney(r.remainingBalance) : '₹0'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -197,22 +288,34 @@ export default async function BillingPage() {
                 <thead>
                   <tr className="border-b border-stone-50 bg-stone-50/40">
                     <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Project</th>
-                    <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Status</th>
+                    <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Contract Value</th>
+                    <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Recency</th>
+                    <th className="text-left px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Payment Status</th>
                     <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Last paid</th>
-                    <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">All time</th>
+                    <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Paid (All Time)</th>
+                    <th className="text-right px-5 py-2 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Remaining</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-50">
                   {noClient.map((r) => (
                     <tr key={r.id}>
                       <td className="px-5 py-3 font-medium text-stone-900 whitespace-nowrap">{r.project}</td>
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        <ProjectValueInput projectId={r.id} initialValue={r.value} />
+                      </td>
                       <td className="px-5 py-3 whitespace-nowrap">
                         <StatusPill status={r.status} daysSinceLast={r.daysSinceLast} />
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <PaymentStatusPill status={r.paymentStatus} value={r.value} paid={r.allIncome} />
                       </td>
                       <td className="px-5 py-3 text-right text-stone-500 whitespace-nowrap">
                         {r.lastPaymentDate ? formatDate(r.lastPaymentDate) : '—'}
                       </td>
                       <td className="px-5 py-3 text-right font-semibold text-stone-900 whitespace-nowrap">{formatMoney(r.allIncome)}</td>
+                      <td className={`px-5 py-3 text-right font-semibold whitespace-nowrap ${r.remainingBalance > 0 ? 'text-amber-600' : 'text-stone-400'}`}>
+                        {r.remainingBalance > 0 ? formatMoney(r.remainingBalance) : '₹0'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -229,6 +332,49 @@ export default async function BillingPage() {
         )}
       </div>
     </div>
+  )
+}
+
+function PaymentStatusPill({
+  status,
+  value,
+  paid,
+}: {
+  status: 'fully_paid' | 'advance' | 'unpaid' | 'no_contract'
+  value: number
+  paid: number
+}) {
+  if (status === 'no_contract') {
+    return (
+      <Badge className="bg-stone-100 text-stone-500 border-none">
+        No Contract
+      </Badge>
+    )
+  }
+  if (status === 'fully_paid') {
+    return (
+      <Badge className="bg-green-50 text-green-700 border border-green-200">
+        Fully Paid
+      </Badge>
+    )
+  }
+  if (status === 'advance') {
+    const pct = value > 0 ? Math.round((paid / value) * 100) : 0
+    return (
+      <div className="flex flex-col gap-1">
+        <Badge className="bg-amber-50 text-amber-700 border border-amber-200 w-fit">
+          Advance ({pct}%)
+        </Badge>
+        <div className="w-20 bg-stone-100 rounded-full h-1 overflow-hidden">
+          <div className="bg-amber-500 h-1 rounded-full" style={{ width: `${pct}%` }}></div>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <Badge className="bg-red-50 text-red-700 border border-red-200">
+      Unpaid
+    </Badge>
   )
 }
 

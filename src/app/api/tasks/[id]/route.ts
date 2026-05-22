@@ -21,7 +21,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   let body = await req.json()
 
-  if (user.role === 'EMPLOYEE') {
+  const isEmployee = user.role === 'EMPLOYEE' || ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
+  if (isEmployee) {
     if (before.assignedToId !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     if (body.status === undefined) return NextResponse.json({ error: 'Employees can only update task status' }, { status: 403 })
     body = { status: body.status }

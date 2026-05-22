@@ -30,7 +30,7 @@ function greet(name: string) {
 async function getStats(userId: string, role: string) {
   const isAdmin = role === 'ADMIN'
   const isManager = role === 'MANAGER'
-  const isEmployee = role === 'EMPLOYEE'
+  const isEmployee = role === 'EMPLOYEE' || ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(role)
   const canSeeFinance = isAdmin
   const canSeeTeamCount = isAdmin || isManager
 
@@ -54,9 +54,13 @@ async function getStats(userId: string, role: string) {
   const contentFilters: Record<string, string> = {}
   if (isEmployee) contentFilters.assigneeId = `eq.${userId}`
 
+  const projectFilters: Record<string, string> = {}
+  if (role === 'CLIENT') projectFilters.clientId = `eq.${userId}`
+
   const [
     totalTasks, todoTasks, recentTasks, recentContent, upcomingEvents,
     totalContent, totalProjects, activeProjects,
+    loans,
   ] = await Promise.all([
     safe(() => sbCount('tasks', taskFilters), 0),
     safe(() => sbCount('tasks', { ...taskFilters, status: 'eq.TODO' }), 0),
@@ -76,8 +80,11 @@ async function getStats(userId: string, role: string) {
       order: 'startTime.asc',
     }), [] as any[]),
     safe(() => sbCount('content', contentFilters), 0),
-    safe(() => sbCount('projects', {}), 0),
-    safe(() => sbCount('projects', { status: 'eq.ACTIVE' }), 0),
+    safe(() => sbCount('projects', projectFilters), 0),
+    safe(() => sbCount('projects', { ...projectFilters, status: 'eq.ACTIVE' }), 0),
+    canSeeFinance
+      ? safe(() => sbSelect('loans', { select: 'amount,status', filters: { status: 'eq.PENDING' } }), [] as any[])
+      : Promise.resolve([] as any[]),
   ])
 
   // Filter urgent/overdue in-memory
@@ -162,6 +169,47 @@ async function getStats(userId: string, role: string) {
     seenMetrics.add(m.content_id); return true
   }).slice(0, 5)
 
+  let clientOutstanding = 0
+  let clientPaid = 0
+  let clientTotalValue = 0
+
+  if (role === 'CLIENT') {
+    const clientProjects = await safe(() => sbSelect('projects', {
+      select: 'id,value,status',
+      filters: { clientId: `eq.${userId}` }
+    }), [] as any[])
+
+    const projectIds = clientProjects.map((p: any) => p.id)
+    let clientTransactions = [] as any[]
+    if (projectIds.length > 0) {
+      clientTransactions = await safe(() => sbSelect('transactions', {
+        select: 'id,amount,projectId,type',
+        filters: {
+          type: 'eq.INCOME',
+          projectId: `in.(${projectIds.join(',')})`
+        }
+      }), [] as any[])
+    }
+
+    const txByProj = new Map<string, number>()
+    for (const t of clientTransactions) {
+      if (!t.projectId) continue
+      txByProj.set(t.projectId, (txByProj.get(t.projectId) ?? 0) + Number(t.amount))
+    }
+
+    for (const p of clientProjects) {
+      const pVal = p.value ? Number(p.value) : 0
+      const pPaid = txByProj.get(p.id) ?? 0
+      clientTotalValue += pVal
+      clientPaid += pPaid
+      if (p.status === 'ACTIVE' || p.status === 'PAUSED') {
+        clientOutstanding += Math.max(0, pVal - pPaid)
+      }
+    }
+  }
+
+  const pendingLoans = loans.reduce((acc: number, item: any) => acc + (parseFloat(item.amount) || 0), 0)
+
   return {
     totalTasks, todoTasks, urgentTasks, overdueTasks,
     totalContent, editingContent,
@@ -173,7 +221,11 @@ async function getStats(userId: string, role: string) {
     monthlyIncome,
     monthlyExpense,
     topClients,
-      topMetrics: dedupedMetrics,
+    topMetrics: dedupedMetrics,
+    clientOutstanding,
+    clientPaid,
+    clientTotalValue,
+    pendingLoans,
   }
 }
 
@@ -224,6 +276,20 @@ export default async function OverviewPage() {
     },
     ...(stats.totalUsers !== null
       ? [{ label: 'Team Members', value: stats.totalUsers, sub: 'All users', icon: Users, iconBg: 'bg-teal-100 text-teal-600' }]
+      : []),
+    ...(isClient
+      ? [
+          {
+            label: 'Outstanding Balance',
+            value: formatMoney(stats.clientOutstanding),
+            sub: stats.clientTotalValue > 0
+              ? `Paid ${formatMoney(stats.clientPaid)} of ${formatMoney(stats.clientTotalValue)}`
+              : 'No contract value set',
+            icon: IndianRupee,
+            iconBg: stats.clientOutstanding > 0 ? 'bg-amber-100 text-amber-600 font-medium' : 'bg-green-100 text-green-600 font-medium',
+            alert: stats.clientOutstanding > 0 ? 'Payment Left' : null,
+          },
+        ]
       : []),
   ]
 
@@ -295,7 +361,7 @@ export default async function OverviewPage() {
 
         {/* Monthly money strip — admin only */}
         {isAdmin && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
                 <div className="p-1.5 rounded-lg bg-green-100">
@@ -324,6 +390,15 @@ export default async function OverviewPage() {
               <p className={`text-xl font-bold ${monthlyNet >= 0 ? 'text-violet-800' : 'text-red-700'}`}>
                 {formatMoney(monthlyNet)}
               </p>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 rounded-lg bg-amber-100">
+                  <TrendingDown size={13} className="text-amber-600" />
+                </div>
+                <p className="text-[11px] uppercase tracking-wide text-amber-700 font-semibold">Pending Loans Owed</p>
+              </div>
+              <p className="text-xl font-bold text-amber-800">{formatMoney(stats.pendingLoans)}</p>
             </div>
           </div>
         )}

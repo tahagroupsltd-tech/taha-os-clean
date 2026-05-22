@@ -24,6 +24,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import toast from 'react-hot-toast'
+import { ClientProjectDetail } from '@/components/client/ClientProjectDetail'
 
 const SOP_COLORS: Record<number, string> = {
   1: 'bg-blue-100 text-blue-800',   2: 'bg-violet-100 text-violet-800',
@@ -432,6 +433,12 @@ export default function ProjectDetailPage() {
       </div>
     </div>
   )
+
+  // ── Client portal: premium branded view instead of internal admin layout ──────
+  if (user?.role === 'CLIENT') {
+    return <ClientProjectDetail project={project} />
+  }
+  // ────────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

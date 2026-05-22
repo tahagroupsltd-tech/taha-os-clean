@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
   const filters: Record<string, string> = {}
   if (status) filters.status = `eq.${status}`
   if (projectId) filters.projectId = `eq.${projectId}`
-  if (user.role === 'EMPLOYEE') filters.assignedToId = `eq.${user.id}`
+  const isEmployee = user.role === 'EMPLOYEE' || ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
+  if (isEmployee) filters.assignedToId = `eq.${user.id}`
 
   const tasks = await sbSelect('tasks', {
     select: TASK_SELECT,

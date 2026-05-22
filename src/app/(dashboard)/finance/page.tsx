@@ -15,6 +15,7 @@ import {
 import type { Transaction, TransactionType, TransactionCategory } from '@/types'
 import { Plus, Pencil, Trash2, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, RefreshCw, FileText, ExternalLink, CheckCircle2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { AnalyticsTab } from '@/components/finance/AnalyticsTab'
 
 const TYPE_OPTIONS = Object.entries(TRANSACTION_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))
 const CATEGORY_OPTIONS = Object.entries(TRANSACTION_CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }))
@@ -57,7 +58,7 @@ export default function FinancePage() {
   } | null>(null)
   const [lastSynced, setLastSynced] = useState<Date | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [activeTab, setActiveTab] = useState<'transactions' | 'invoices'>('transactions')
+  const [activeTab, setActiveTab] = useState<'transactions' | 'invoices' | 'loans' | 'analytics'>('transactions')
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState<string>('')
@@ -65,6 +66,10 @@ export default function FinancePage() {
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [form, setForm] = useState<TxForm>(EMPTY)
   const [saving, setSaving] = useState(false)
+
+  const [loanModalOpen, setLoanModalOpen] = useState(false)
+  const [editingLoan, setEditingLoan] = useState<LoanRow | null>(null)
+  const [pendingLoans, setPendingLoans] = useState(0)
 
 
 
@@ -93,8 +98,21 @@ export default function FinancePage() {
     }
   }, [])
 
+  const fetchPendingLoans = useCallback(async () => {
+    try {
+      const res = await fetch('/api/loans')
+      const json = await res.json()
+      if (res.ok && json.summary) {
+        setPendingLoans(json.summary.pendingTotal || 0)
+      }
+    } catch (err) {
+      console.error('Error fetching pending loans:', err)
+    }
+  }, [])
+
   useEffect(() => { fetchTransactions() }, [fetchTransactions])
   useEffect(() => { if (isFounder) fetchLiveSummary() }, [isFounder, fetchLiveSummary])
+  useEffect(() => { if (isFounder) fetchPendingLoans() }, [isFounder, fetchPendingLoans])
 
   useEffect(() => {
     if (user?.role !== 'CLIENT') {
@@ -216,13 +234,21 @@ export default function FinancePage() {
                 <Plus size={13} /> New invoice
               </Button>
             )}
+            {activeTab === 'loans' && (
+              <Button size="sm" onClick={() => {
+                setEditingLoan(null)
+                setLoanModalOpen(true)
+              }}>
+                <Plus size={13} /> New loan
+              </Button>
+            )}
           </div>
         }
       />
 
       {/* Tab bar */}
       <div className="flex border-b border-stone-100 bg-white px-5 gap-4 flex-shrink-0">
-        {(['transactions', 'invoices'] as const).map(t => (
+        {(['transactions', 'invoices', 'loans', 'analytics'] as const).map(t => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -232,7 +258,7 @@ export default function FinancePage() {
                 : 'border-transparent text-stone-400 hover:text-stone-700'
             }`}
           >
-            {t}
+            {t === 'analytics' ? '📊 Analytics' : t}
           </button>
         ))}
       </div>
@@ -279,7 +305,8 @@ export default function FinancePage() {
         )}
 
         {/* Summary cards (filter-aware) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">          <SummaryCard
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <SummaryCard
             label="Total Income"
             value={summary.income}
             icon={<TrendingUp size={16} />}
@@ -296,6 +323,12 @@ export default function FinancePage() {
             value={summary.net}
             icon={<Wallet size={16} />}
             tone={summary.net >= 0 ? 'blue' : 'red'}
+          />
+          <SummaryCard
+            label="Pending Loans (Owed)"
+            value={pendingLoans}
+            icon={<TrendingDown size={16} />}
+            tone="amber"
           />
         </div>
 
@@ -438,6 +471,18 @@ export default function FinancePage() {
         {activeTab === 'invoices' && (
           <InvoicesTab />
         )}
+        {activeTab === 'loans' && (
+          <LoansTab
+            modalOpen={loanModalOpen}
+            setModalOpen={setLoanModalOpen}
+            editing={editingLoan}
+            setEditing={setEditingLoan}
+            onRefresh={fetchPendingLoans}
+          />
+        )}
+        {activeTab === 'analytics' && (
+          <AnalyticsTab />
+        )}
     </div>
   </div>
   )
@@ -449,12 +494,13 @@ function SummaryCard({
   label: string
   value: number
   icon: React.ReactNode
-  tone: 'green' | 'red' | 'blue'
+  tone: 'green' | 'red' | 'blue' | 'amber'
 }) {
   const toneClasses = {
     green: 'bg-green-50 text-green-700 border-green-100',
     red: 'bg-red-50 text-red-700 border-red-100',
     blue: 'bg-blue-50 text-blue-700 border-blue-100',
+    amber: 'bg-amber-50 text-amber-700 border-amber-100',
   }
   return (
     <div className="bg-white rounded-lg border border-stone-100 p-4 shadow-card">
@@ -866,6 +912,342 @@ function InvoicesTab() {
         </div>
       </Modal>
     </>
+  )
+}
+
+// ─── Loans Tab ───────────────────────────────────────────────────────────────
+
+interface LoanRow {
+  id: string
+  title: string
+  amount: number
+  status: 'PENDING' | 'PAID'
+  due_date: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface LoanForm {
+  title: string
+  amount: string
+  status: 'PENDING' | 'PAID'
+  dueDate: string
+  notes: string
+}
+
+const EMPTY_LOAN: LoanForm = {
+  title: '',
+  amount: '',
+  status: 'PENDING',
+  dueDate: '',
+  notes: '',
+}
+
+function LoansTab({
+  modalOpen,
+  setModalOpen,
+  editing,
+  setEditing,
+  onRefresh,
+}: {
+  modalOpen: boolean
+  setModalOpen: (open: boolean) => void
+  editing: LoanRow | null
+  setEditing: (loan: LoanRow | null) => void
+  onRefresh?: () => void
+}) {
+  const [loans, setLoans] = useState<LoanRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [summary, setSummary] = useState({ pendingTotal: 0, paidTotal: 0, total: 0 })
+  const [form, setForm] = useState<LoanForm>(EMPTY_LOAN)
+
+  const fetchLoans = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/loans')
+      const json = await res.json()
+      if (res.ok) {
+        setLoans(json.data ?? [])
+        if (json.summary) setSummary(json.summary)
+        if (onRefresh) onRefresh()
+      }
+    } catch (err) {
+      console.error('Error fetching loans:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [onRefresh])
+
+  useEffect(() => {
+    fetchLoans()
+  }, [fetchLoans])
+
+  useEffect(() => {
+    if (editing) {
+      setForm({
+        title: editing.title,
+        amount: String(editing.amount),
+        status: editing.status,
+        dueDate: editing.due_date ? editing.due_date.split('T')[0] : '',
+        notes: editing.notes ?? '',
+      })
+    } else {
+      setForm(EMPTY_LOAN)
+    }
+  }, [editing])
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return toast.error('Title is required')
+    const amount = parseFloat(form.amount)
+    if (isNaN(amount) || amount <= 0) return toast.error('Amount must be > 0')
+
+    setSaving(true)
+    try {
+      const payload = {
+        title: form.title.trim(),
+        amount,
+        status: form.status,
+        due_date: form.dueDate || null,
+        notes: form.notes || null,
+      }
+      const res = editing
+        ? await fetch(`/api/loans/${editing.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+        : await fetch('/api/loans', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+      if (!res.ok) throw new Error((await res.json()).error || 'Save failed')
+      toast.success(editing ? 'Loan updated' : 'Loan created')
+      setModalOpen(false)
+      setEditing(null)
+      fetchLoans()
+    } catch (err: any) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this loan entry?')) return
+    try {
+      const res = await fetch(`/api/loans/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success('Deleted')
+        fetchLoans()
+      } else {
+        toast.error('Failed to delete loan')
+      }
+    } catch (err: any) {
+      toast.error(err.message)
+    }
+  }
+
+  const toggleStatus = async (loan: LoanRow) => {
+    const nextStatus = loan.status === 'PENDING' ? 'PAID' : 'PENDING'
+    try {
+      const res = await fetch(`/api/loans/${loan.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      })
+      if (res.ok) {
+        toast.success(`Loan marked as ${nextStatus}`)
+        fetchLoans()
+      } else {
+        toast.error('Failed to update status')
+      }
+    } catch (err: any) {
+      toast.error(err.message)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Outstanding Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <SummaryCard
+          label="Total Amount Owed (Pending)"
+          value={summary.pendingTotal}
+          icon={<TrendingDown size={16} />}
+          tone="red"
+        />
+        <SummaryCard
+          label="Amount Paid"
+          value={summary.paidTotal}
+          icon={<CheckCircle2 size={16} />}
+          tone="green"
+        />
+        <SummaryCard
+          label="Total Loan Value"
+          value={summary.total}
+          icon={<Wallet size={16} />}
+          tone="blue"
+        />
+      </div>
+
+      {/* Loans table */}
+      <div className="bg-white rounded-lg border border-stone-100 shadow-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+          <p className="text-xs font-semibold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
+            <TrendingDown size={13} className="text-red-500" /> Loans Owed (Amount to Give to Others)
+          </p>
+          <button
+            onClick={() => {
+              setEditing(null)
+              setModalOpen(true)
+            }}
+            className="inline-flex items-center gap-1 text-xs font-medium bg-stone-900 text-white px-2.5 py-1.5 rounded-md hover:bg-stone-700 transition-colors"
+          >
+            <Plus size={12} /> New loan
+          </button>
+        </div>
+
+        {loading ? (
+          <p className="text-xs text-stone-400 text-center py-8">Loading...</p>
+        ) : loans.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-sm font-medium text-stone-500 mb-1">No loans log yet</p>
+            <p className="text-xs text-stone-400">Click New Loan to log what you owe to others</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-stone-50/75 border-b border-stone-100 text-stone-500 font-semibold">
+                  <th className="p-3">Title</th>
+                  <th className="p-3">Amount</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Due Date</th>
+                  <th className="p-3">Notes</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {loans.map((loan) => (
+                  <tr key={loan.id} className="hover:bg-stone-50/50">
+                    <td className="p-3 font-semibold text-stone-900">{loan.title}</td>
+                    <td className="p-3 font-bold text-stone-900">{formatMoney(loan.amount)}</td>
+                    <td className="p-3">
+                      <button
+                        onClick={() => toggleStatus(loan)}
+                        className={cn(
+                          'px-2 py-0.5 rounded font-semibold text-[10px] uppercase tracking-wide transition-colors',
+                          loan.status === 'PAID'
+                            ? 'bg-green-50 text-green-700 border border-green-200'
+                            : 'bg-red-50 text-red-700 border border-red-200'
+                        )}
+                        title="Click to toggle status"
+                      >
+                        {loan.status}
+                      </button>
+                    </td>
+                    <td className="p-3 text-stone-500">{formatDate(loan.due_date)}</td>
+                    <td className="p-3 text-stone-500 max-w-[200px] truncate" title={loan.notes ?? ''}>
+                      {loan.notes ?? '—'}
+                    </td>
+                    <td className="p-3 text-right space-x-1">
+                      <button
+                        onClick={() => setEditing(loan)}
+                        className="p-1 text-stone-300 hover:text-stone-700 inline-flex items-center"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(loan.id)}
+                        className="p-1 text-stone-300 hover:text-red-500 inline-flex items-center"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Loan Form Modal */}
+      <Modal
+        open={modalOpen}
+        onClose={() => {
+          setModalOpen(false)
+          setEditing(null)
+        }}
+        title={editing ? 'Edit Loan Entry' : 'New Loan Entry'}
+        size="md"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Title / To Whom"
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            placeholder="e.g. Loan from Taha"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Amount (₹)"
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              placeholder="0.00"
+            />
+            <Select
+              label="Status"
+              options={[
+                { value: 'PENDING', label: 'Pending (Owed)' },
+                { value: 'PAID', label: 'Paid' },
+              ]}
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value as 'PENDING' | 'PAID' })}
+            />
+          </div>
+          <Input
+            label="Due Date"
+            type="date"
+            value={form.dueDate}
+            onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
+          />
+          <div>
+            <label className="text-xs font-medium text-stone-600 uppercase tracking-wide block mb-1.5">
+              Notes
+            </label>
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              placeholder="Repayment terms, reference details, etc."
+              rows={3}
+              className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400 resize-none"
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => {
+                setModalOpen(false)
+                setEditing(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button className="flex-1" loading={saving} onClick={handleSave}>
+              {editing ? 'Save changes' : 'Create'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
   )
 }
 

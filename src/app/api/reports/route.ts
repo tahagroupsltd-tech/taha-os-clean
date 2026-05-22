@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       }),
     ])
 
-    const staffUsers = users.filter((u: any) => ['ADMIN', 'MANAGER', 'EMPLOYEE'].includes(u.role))
+    const staffUsers = users.filter((u: any) => u.role !== 'CLIENT')
     const submitted = new Map(reportsToday.map((r: any) => [r.ownerId, r]))
 
     return NextResponse.json({

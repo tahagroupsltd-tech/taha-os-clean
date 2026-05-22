@@ -8,8 +8,8 @@ const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/webhook', '/api/debug']
 
 // Role-based page access (settings is open to all so anyone can change their own password)
 const ROLE_ACCESS: Record<string, string[]> = {
-  '/team': ['ADMIN', 'EMPLOYEE'],
-  '/reports': ['ADMIN', 'EMPLOYEE'],
+  '/team': ['ADMIN', 'MANAGER'],
+  '/reports': ['ADMIN', 'MANAGER', 'EMPLOYEE'],
   '/billing': ['ADMIN'],
   '/crm': ['ADMIN', 'MANAGER'],
 }
@@ -37,14 +37,19 @@ export async function middleware(request: NextRequest) {
 
   // Role-based access check
   for (const [path, roles] of Object.entries(ROLE_ACCESS)) {
-    if (pathname.startsWith(path) && !roles.includes(user.role)) {
-      return NextResponse.redirect(new URL('/overview', request.url))
+    if (pathname.startsWith(path)) {
+      const effectiveRole = ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
+        ? 'EMPLOYEE'
+        : user.role
+      if (!roles.includes(effectiveRole)) {
+        return NextResponse.redirect(new URL('/overview', request.url))
+      }
     }
   }
 
-  // Client role: restrict to /overview, /clients, /settings (for password change)
+  // Client role: restrict to /overview, /clients, /settings (for password change), /projects, /calendar
   if (user.role === 'CLIENT') {
-    const allowedForClient = ['/overview', '/clients', '/settings']
+    const allowedForClient = ['/overview', '/clients', '/settings', '/projects', '/calendar']
     const isAllowed = allowedForClient.some((p) => pathname.startsWith(p))
     if (!isAllowed && !pathname.startsWith('/api')) {
       return NextResponse.redirect(new URL('/overview', request.url))

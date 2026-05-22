@@ -15,7 +15,8 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get('to')
 
   const filters: Record<string, string> = {}
-  if (user.role === 'EMPLOYEE') filters.ownerId = `eq.${user.id}`
+  const isEmployee = user.role === 'EMPLOYEE' || ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
+  if (isEmployee) filters.ownerId = `eq.${user.id}`
   if (from) filters['startTime'] = `gte.${new Date(from).toISOString()}`
   // PostgREST only supports one filter per key, handle 'to' separately via select params if needed
   // For simplicity, we pass both and let the client filter — or use lte filter

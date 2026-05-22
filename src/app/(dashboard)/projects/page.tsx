@@ -21,6 +21,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { ClientProjectsView } from '@/components/client/ClientProjectsView'
 
 const STATUS_OPTIONS = Object.entries(PROJECT_STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))
 
@@ -59,6 +60,7 @@ interface ProjectForm {
   driveFolder: string
   boardColumn: KanbanStage
   sopLevel: string
+  value: string
 }
 
 const EMPTY: ProjectForm = {
@@ -71,6 +73,7 @@ const EMPTY: ProjectForm = {
   driveFolder: '',
   boardColumn: 'LEAD',
   sopLevel: '',
+  value: '',
 }
 
 type ViewMode = 'grid' | 'board'
@@ -82,6 +85,20 @@ function getStoredView(): ViewMode {
 
 export default function ProjectsPage() {
   const user = useAuthStore((s) => s.user)
+
+  // ── Client portal: render a completely separate, brand-tailored view ─────────
+  if (user?.role === 'CLIENT') {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <TopBar title="My Projects" />
+        <div className="flex-1 overflow-y-auto p-5">
+          <ClientProjectsView />
+        </div>
+      </div>
+    )
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
   const [projects, setProjects] = useState<Project[]>([])
   const [clients, setClients] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
@@ -152,6 +169,7 @@ export default function ProjectsPage() {
       driveFolder: p.driveFolder ?? '',
       boardColumn: p.boardColumn ?? 'ACTIVE',
       sopLevel: p.sopLevel != null ? String(p.sopLevel) : '',
+      value: p.value != null ? String(p.value) : '',
     })
     setModalOpen(true)
   }
@@ -170,6 +188,7 @@ export default function ProjectsPage() {
         dueDate: form.dueDate || null,
         driveFolder: form.driveFolder.trim() || null,
         sopLevel: form.sopLevel ? parseInt(form.sopLevel) : null,
+        value: form.value ? parseFloat(form.value) : null,
       }
       const res = editingId
         ? await fetch(`/api/projects/${editingId}`, {
@@ -645,12 +664,23 @@ export default function ProjectsPage() {
               onChange={(e) => setForm({ ...form, boardColumn: e.target.value as KanbanStage })}
             />
           </div>
-          <Select
-            label="SOP Level"
-            options={SOP_LEVELS}
-            value={form.sopLevel}
-            onChange={(e) => setForm({ ...form, sopLevel: e.target.value })}
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="SOP Level"
+              options={SOP_LEVELS}
+              value={form.sopLevel}
+              onChange={(e) => setForm({ ...form, sopLevel: e.target.value })}
+            />
+            <Input
+              label="Project Value (₹)"
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.value}
+              onChange={(e) => setForm({ ...form, value: e.target.value })}
+              placeholder="0.00"
+            />
+          </div>
           {clients.length > 0 && (
             <Select
               label="Client"

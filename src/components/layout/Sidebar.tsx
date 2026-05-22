@@ -42,6 +42,10 @@ const ROLE_COLORS: Record<string, string> = {
   ADMIN:    'bg-violet-500/20 text-violet-300',
   MANAGER:  'bg-blue-500/20 text-blue-300',
   EMPLOYEE: 'bg-cyan-500/20 text-cyan-300',
+  EDITOR:   'bg-cyan-500/20 text-cyan-300',
+  SCRIPTWRITER: 'bg-cyan-500/20 text-cyan-300',
+  GRAPHIC_DESIGNER: 'bg-cyan-500/20 text-cyan-300',
+  WEB_DESIGNER: 'bg-cyan-500/20 text-cyan-300',
   CLIENT:   'bg-emerald-500/20 text-emerald-300',
 }
 
@@ -51,7 +55,11 @@ export function Sidebar() {
   const { sidebarOpen, setSidebarOpen } = useUIStore()
   const [crmOpen, setCrmOpen] = useState(pathname.startsWith('/crm'))
 
-  const visibleItems = NAV_ITEMS.filter(item => user && item.roles.includes(user.role))
+  const effectiveRole = user && ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
+    ? 'EMPLOYEE'
+    : user?.role
+
+  const visibleItems = NAV_ITEMS.filter(item => user && effectiveRole && item.roles.includes(effectiveRole))
   const showCrm = user && ['ADMIN','MANAGER'].includes(user.role)
   const crmActive = pathname.startsWith('/crm')
 
