@@ -19,18 +19,24 @@ export async function GET(req: NextRequest) {
   const filters: Record<string, string> = {}
   if (status) filters.status = `eq.${status}`
   if (projectId) filters.projectId = `eq.${projectId}`
+
   const isEmployee = user.role === 'EMPLOYEE' || ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
+
+  // Employees only see their own tasks — enforced at DB level
   if (isEmployee) filters.assignedToId = `eq.${user.id}`
 
+  // Clients: filter by their own clientId at DB level via a project join is not
+  // directly supported in PostgREST without RPC, so we fetch & filter client-side
+  // but only select the fields we need for safety.
   const tasks = await sbSelect('tasks', {
     select: TASK_SELECT,
     filters,
     order: 'priority.desc,deadline.asc,createdAt.desc',
   })
 
-  // Client: filter by their projects client-side
+  // Client: only show tasks belonging to projects where they are the client
   const data = user.role === 'CLIENT'
-    ? tasks.filter((t: any) => t.project?.clientId === user.id)
+    ? tasks.filter((t: any) => t.project?.clientId === user.id || t.project?.client?.id === user.id)
     : tasks
 
   return NextResponse.json({ data })
@@ -46,6 +52,10 @@ export async function POST(req: NextRequest) {
 
   if (!title) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
 
+  // Bug 2 fix: employees creating tasks are auto-assigned to themselves
+  const isEmp = user.role === 'EMPLOYEE' || ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
+  const resolvedAssignee = isEmp ? user.id : (assignedToId || null)
+
   const now = nowTs()
   const task = await sbInsert('tasks', {
     title,
@@ -53,7 +63,7 @@ export async function POST(req: NextRequest) {
     status: status ?? 'TODO',
     priority: priority ?? 'MEDIUM',
     deadline: deadline ? new Date(deadline).toISOString() : null,
-    assignedToId: assignedToId || null,
+    assignedToId: resolvedAssignee,
     createdById: user.id,
     projectId: projectId || null,
     createdAt: now,

@@ -13,9 +13,12 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
   const role = searchParams.get('role')
+  const excludeRole = searchParams.get('excludeRole')
 
   const filters: Record<string, string> = {}
   if (role) filters.role = `eq.${role}`
+  // excludeRole filters out a specific role (e.g. CLIENT from assignee dropdowns)
+  if (excludeRole) filters.role = `neq.${excludeRole}`
 
   const users = await sbSelect('users', {
     select: 'id,username,name,role,phone,email,isActive,createdAt',

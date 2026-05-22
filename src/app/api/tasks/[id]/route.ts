@@ -45,7 +45,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const projectLabel = updated?.project ? ` · ${updated.project.name}` : ''
 
-  if (body.assignedToId !== undefined && body.assignedToId !== before.assignedToId && body.assignedToId && body.assignedToId !== user.id) {
+  // Bug 4 fix: compare raw assignedToId field (not nested join object) to
+  // avoid false-positive reassignment notifications when assignee didn't change.
+  const prevAssigneeId = before.assignedToId ?? null
+  const newAssigneeId = body.assignedToId ?? null
+  if (newAssigneeId !== undefined && newAssigneeId !== prevAssigneeId && newAssigneeId && newAssigneeId !== user.id) {
     const dueLabelReassign = updated?.deadline
       ? ` (due ${new Date(updated.deadline).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})`
       : ''

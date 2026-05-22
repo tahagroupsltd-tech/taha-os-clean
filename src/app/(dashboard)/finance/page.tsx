@@ -586,10 +586,10 @@ function InvoicesTab() {
   useEffect(() => {
     load()
     Promise.all([
-      fetch('/api/users').then(r => r.json()),
+      fetch('/api/users?role=CLIENT').then(r => r.json()),
       fetch('/api/projects').then(r => r.json()),
     ]).then(([u, p]) => {
-      setClients((u.data ?? []).filter((x: any) => x.role === 'CLIENT'))
+      setClients(u.data ?? [])
       setProjects(p.data ?? [])
     })
   }, [load])

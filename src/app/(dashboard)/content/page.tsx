@@ -316,7 +316,8 @@ export default function ContentPage() {
 
   useEffect(() => {
     if (user?.role === 'ADMIN' || user?.role === 'MANAGER') {
-      fetch('/api/users').then(r => r.json()).then(j => setUsers(j.data ?? []))
+      // Exclude CLIENTs — they cannot be assignees on content items
+      fetch('/api/users?excludeRole=CLIENT').then(r => r.json()).then(j => setUsers(j.data ?? []))
       fetch('/api/projects').then(r => r.json()).then(j => setProjects(j.data ?? []))
     }
   }, [user])
