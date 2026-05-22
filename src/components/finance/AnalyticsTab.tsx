@@ -2,7 +2,7 @@
 // src/components/finance/AnalyticsTab.tsx
 import { useEffect, useMemo, useState } from 'react'
 import { formatMoney } from '@/lib/utils'
-import { TrendingUp, TrendingDown, Wallet, BarChart2, PieChart, Activity } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, BarChart2, PieChart, Activity, HandCoins, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 interface Transaction {
   id: string
@@ -12,6 +12,15 @@ interface Transaction {
   category: string
   date: string
   project?: { id: string; name: string } | null
+}
+
+interface Loan {
+  id: string
+  title: string
+  amount: number
+  status: 'PENDING' | 'PAID'
+  due_date: string | null
+  notes: string | null
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -248,17 +257,26 @@ function HorizBar({ data }: { data: { label: string; value: number; color: strin
 
 export function AnalyticsTab() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [loans, setLoans] = useState<Loan[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/transactions')
-      .then((r) => r.json())
-      .then((j) => {
-        setTransactions(j.data ?? [])
-        setLoading(false)
+    Promise.all([
+      fetch('/api/transactions').then((r) => r.json()),
+      fetch('/api/loans').then((r) => r.json()),
+    ])
+      .then(([txJson, loanJson]) => {
+        setTransactions(txJson.data ?? [])
+        setLoans(loanJson.data ?? [])
       })
-      .catch(() => setLoading(false))
+      .catch((e) => console.error('[AnalyticsTab] fetch error:', e))
+      .finally(() => setLoading(false))
   }, [])
+
+  // Loan stats
+  const loanPending = useMemo(() => loans.filter((l) => l.status === 'PENDING').reduce((s, l) => s + Number(l.amount), 0), [loans])
+  const loanPaid    = useMemo(() => loans.filter((l) => l.status === 'PAID').reduce((s, l) => s + Number(l.amount), 0), [loans])
+  const loanTotal   = loanPending + loanPaid
 
   const months = useMemo(() => getLast6Months(), [])
 
@@ -329,8 +347,8 @@ export function AnalyticsTab() {
 
   return (
     <div className="space-y-5">
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* KPI strip — 5 cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 p-4">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-7 h-7 rounded-md bg-green-100 flex items-center justify-center">
@@ -366,6 +384,19 @@ export function AnalyticsTab() {
             <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide">This Month Net</p>
           </div>
           <p className="text-xl font-bold text-amber-800">{formatMoney(thisMonthInc - thisMonthExp)}</p>
+        </div>
+        {/* Loans Pending KPI */}
+        <div className="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-7 h-7 rounded-md bg-orange-100 flex items-center justify-center">
+              <HandCoins size={14} className="text-orange-700" />
+            </div>
+            <p className="text-[10px] font-semibold text-orange-700 uppercase tracking-wide">Loans Pending</p>
+          </div>
+          <p className="text-xl font-bold text-orange-800">{formatMoney(loanPending)}</p>
+          {loans.length > 0 && (
+            <p className="text-[9px] text-orange-500 mt-0.5">{loans.filter(l => l.status === 'PENDING').length} of {loans.length} unpaid</p>
+          )}
         </div>
       </div>
 
@@ -439,6 +470,97 @@ export function AnalyticsTab() {
           <HorizBar data={expenseSlices} />
         </div>
       </div>
+
+      {/* ── Loans Overview ─────────────────────────────────────────────────── */}
+      {loans.length > 0 && (
+        <div className="bg-white rounded-xl border border-stone-100 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-md bg-orange-50 flex items-center justify-center">
+                <HandCoins size={14} className="text-orange-600" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-stone-900">Loans Overview</p>
+                <p className="text-[10px] text-stone-400">Money lent out — pending vs recovered</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 text-right">
+              <div>
+                <p className="text-[9px] text-stone-400 uppercase tracking-wide">Total Lent</p>
+                <p className="text-sm font-bold text-stone-800">{formatMoney(loanTotal)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Pending vs Paid summary bar */}
+          {loanTotal > 0 && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-orange-600 font-semibold">Pending — {formatMoney(loanPending)}</span>
+                <span className="text-[10px] text-emerald-600 font-semibold">Recovered — {formatMoney(loanPaid)}</span>
+              </div>
+              <div className="w-full h-3 bg-stone-100 rounded-full overflow-hidden flex">
+                <div
+                  className="h-full bg-gradient-to-r from-orange-400 to-amber-400 transition-all duration-700"
+                  style={{ width: `${clamp((loanPending / loanTotal) * 100, 0, 100)}%` }}
+                />
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-400 to-green-400 transition-all duration-700"
+                  style={{ width: `${clamp((loanPaid / loanTotal) * 100, 0, 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Loan itemised list */}
+          <div className="space-y-2">
+            {loans.map((loan) => {
+              const isPending = loan.status === 'PENDING'
+              const isOverdue = isPending && loan.due_date && new Date(loan.due_date) < new Date()
+              return (
+                <div
+                  key={loan.id}
+                  className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                    isOverdue
+                      ? 'bg-red-50/60 border-red-100'
+                      : isPending
+                      ? 'bg-orange-50/40 border-orange-100'
+                      : 'bg-emerald-50/30 border-emerald-100'
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    isOverdue ? 'bg-red-100' : isPending ? 'bg-orange-100' : 'bg-emerald-100'
+                  }`}>
+                    {isPending
+                      ? <AlertCircle size={13} className={isOverdue ? 'text-red-600' : 'text-orange-600'} />
+                      : <CheckCircle2 size={13} className="text-emerald-600" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-stone-800 truncate">{loan.title}</p>
+                    {loan.due_date && (
+                      <p className={`text-[10px] mt-0.5 ${
+                        isOverdue ? 'text-red-500 font-semibold' : 'text-stone-400'
+                      }`}>
+                        {isOverdue ? '⚠ Overdue · ' : 'Due '}
+                        {new Date(loan.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </p>
+                    )}
+                    {loan.notes && <p className="text-[10px] text-stone-400 truncate mt-0.5">{loan.notes}</p>}
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-bold text-stone-900">{formatMoney(Number(loan.amount))}</p>
+                    <span className={`text-[9px] font-bold uppercase tracking-wide ${
+                      isOverdue ? 'text-red-500' : isPending ? 'text-orange-500' : 'text-emerald-600'
+                    }`}>
+                      {isOverdue ? 'Overdue' : isPending ? 'Pending' : 'Paid'}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
