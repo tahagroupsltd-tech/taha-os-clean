@@ -1,10 +1,11 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { TopBar } from '@/components/layout/TopBar'
 import { useAuthStore } from '@/store/auth.store'
 import { cn } from '@/lib/utils'
-import { CheckCircle2, Circle, RefreshCw, ChevronDown, ChevronRight, BookOpen, X } from 'lucide-react'
+import { CheckCircle2, Circle, RefreshCw, ChevronDown, ChevronRight, BookOpen, X, AlertCircle as AlertCircleIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 // ─── Step definitions with HOW-TO guides ─────────────────────────────────────
@@ -266,7 +267,7 @@ function LevelCard({ level, done, onToggle, saving, disabled, onGuide, projectId
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
-export default function SOPPage() {
+function SOPPageContent() {
   const user = useAuthStore(s => s.user)
   const canEdit = ['ADMIN','MANAGER','EMPLOYEE'].includes(user?.role ?? '')
   const [projects, setProjects] = useState<{ id: string; name: string; sopLevel: number | null }[]>([])
@@ -277,13 +278,40 @@ export default function SOPPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [guide, setGuide] = useState<{ step: typeof SOP[0]['steps'][0]; color: string } | null>(null)
 
+  const [contentItems, setContentItems] = useState<any[]>([])
+  const [loadingContent, setLoadingContent] = useState(false)
+
+  const searchParams = useSearchParams()
+  const queryProjectId = searchParams.get('projectId') || searchParams.get('id')
+
   useEffect(() => {
     fetch('/api/projects').then(r => r.json()).then(j => {
       const list = j.data ?? []
       setProjects(list)
-      if (list.length > 0) setSelectedProject(list[0].id)
+      if (list.length > 0) {
+        const preselected = list.find((p: any) => p.id === queryProjectId)
+        setSelectedProject(preselected ? preselected.id : list[0].id)
+      }
     })
-  }, [])
+  }, [queryProjectId])
+
+  const fetchContent = useCallback(async () => {
+    if (!selectedProject) return
+    setLoadingContent(true)
+    try {
+      const res = await fetch(`/api/content?projectId=${selectedProject}`)
+      const json = await res.json()
+      setContentItems(json.data ?? [])
+    } catch (e) {
+      console.error('Failed to fetch project content items:', e)
+    } finally {
+      setLoadingContent(false)
+    }
+  }, [selectedProject])
+
+  useEffect(() => {
+    fetchContent()
+  }, [fetchContent])
 
   useEffect(() => {
     if (!selectedProject) return
@@ -348,12 +376,46 @@ export default function SOPPage() {
       const projJson = await projRes.json()
       setProjects(projJson.data ?? [])
 
+      // Re-fetch content to show updated values
+      fetchContent()
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to trigger Level 4")
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const handleTriggerL4Scripting = async () => {
+    if (!selectedProject || !canEdit) return
+    const confirm = window.confirm(
+      `60% of content is posted (${postedTracked}/${totalTracked} items). Trigger SOP Level 4 (Script Approval) for the next batch/month?`
+    )
+    if (!confirm) return
+
+    setRefreshing(true)
+    try {
+      const res = await fetch('/api/sop/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: 4, projectId: selectedProject }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      toast.success(json.summary ?? "SOP Level 4 triggered successfully!")
+      
+      // Reload projects list to get updated sopLevel
+      const projRes = await fetch('/api/projects')
+      const projJson = await projRes.json()
+      setProjects(projJson.data ?? [])
+
       // Reload progress
       const progRes = await fetch(`/api/sop/progress?projectId=${selectedProject}`)
       const progJson = await progRes.json()
       setDone(new Set((progJson.data ?? []).map((r: any) => `${r.level}:${r.stepKey}`)))
+      
+      fetchContent()
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to restart from L4")
+      toast.error(e.message ?? "Failed to trigger Level 4")
     } finally {
       setRefreshing(false)
     }
@@ -382,6 +444,14 @@ export default function SOPPage() {
   const total = SOP.reduce((a, l) => a + l.steps.length, 0)
   const completed = done.size
   const currentProject = projects.find(p => p.id === selectedProject)
+
+  // 60% completion calculation
+  const videos = contentItems.filter(c => c.type === 'REEL' || c.type === 'VIDEO')
+  const trackedItems = videos.length > 0 ? videos : contentItems
+  const totalTracked = trackedItems.length
+  const postedTracked = trackedItems.filter(c => c.status === 'POSTED').length
+  const completionPercentage = totalTracked > 0 ? Math.round((postedTracked / totalTracked) * 100) : 0
+  const isOver60Percent = completionPercentage >= 60 && totalTracked > 0
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-stone-50">
@@ -420,9 +490,50 @@ export default function SOPPage() {
           {currentProject?.sopLevel && (
             <span className="text-xs font-bold bg-stone-900 text-white px-2.5 py-1 rounded-full">L{currentProject.sopLevel} active</span>
           )}
-          {(loadingProgress || refreshing) && <RefreshCw size={13} className="text-stone-400 animate-spin" />}
+          {(loadingProgress || refreshing || loadingContent) && <RefreshCw size={13} className="text-stone-400 animate-spin" />}
         </div>
       </div>
+
+      {/* Campaign Content Completion Tracker */}
+      {selectedProject && totalTracked > 0 && (
+        <div className="bg-white border-b border-stone-200 px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-semibold text-stone-500">Video Campaign Progress</span>
+              <span className={cn(
+                "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                isOver60Percent 
+                  ? "bg-green-50 text-green-700 border-green-200" 
+                  : "bg-amber-50 text-amber-700 border-amber-200"
+              )}>
+                {postedTracked}/{totalTracked} Posted ({completionPercentage}%)
+              </span>
+            </div>
+            <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
+              <div 
+                className={cn("h-full transition-all duration-500", isOver60Percent ? "bg-green-500" : "bg-amber-500")} 
+                style={{ width: `${completionPercentage}%` }} 
+              />
+            </div>
+          </div>
+
+          {isOver60Percent && canEdit && (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="text-right hidden lg:block">
+                <p className="text-xs font-bold text-green-700">🎯 Threshold Reached (60%+)</p>
+                <p className="text-[10px] text-stone-400">Ready to start next cycle's scripting</p>
+              </div>
+              <button
+                onClick={handleTriggerL4Scripting}
+                disabled={refreshing || loadingProgress}
+                className="w-full md:w-auto text-xs font-bold text-white bg-green-600 hover:bg-green-700 border border-green-700 rounded-md px-3.5 py-2 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                🚀 Start Next Scripting (L4 SOP)
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tip bar */}
       <div className="bg-violet-600 text-white px-5 py-2 flex items-center gap-2">
@@ -466,5 +577,13 @@ export default function SOPPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function SOPPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full"><p className="text-xs text-stone-400">Loading...</p></div>}>
+      <SOPPageContent />
+    </Suspense>
   )
 }

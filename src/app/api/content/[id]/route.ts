@@ -1,10 +1,10 @@
 // src/app/api/content/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
-import { notify } from '@/lib/notify'
+import { notify, notifyMany } from '@/lib/notify'
 import { canDeleteContent } from '@/lib/permissions'
 import { syncContentEvents, deleteEntityCalendarEvents } from '@/lib/gcal'
-import { sbFindOne, sbUpdate, sbDelete, CONTENT_SELECT } from '@/lib/supa'
+import { sbFindOne, sbSelect, sbUpdate, sbDelete, CONTENT_SELECT } from '@/lib/supa'
 
 export const dynamic = 'force-dynamic'
 
@@ -92,6 +92,47 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           message: `Your ${updated.type.toLowerCase()} for ${updated.project?.name} is now live.`,
           link: '/content',
         })
+
+        // --- 60% completion check for SOP Level 4 trigger ---
+        if (updated.projectId) {
+          try {
+            const contentItems = await sbSelect('content', {
+              select: 'id,status,type',
+              filters: { projectId: `eq.${updated.projectId}` },
+            })
+            const videos = contentItems.filter((c: any) => c.type === 'REEL' || c.type === 'VIDEO')
+            const targetList = videos.length > 0 ? videos : contentItems
+
+            const posted = targetList.filter((c: any) => c.status === 'POSTED').length
+            const total = targetList.length
+
+            if (total > 0 && (posted / total) >= 0.60) {
+              const proj = await sbFindOne('projects', {
+                select: 'id,name,sopLevel',
+                filters: { id: `eq.${updated.projectId}` }
+              })
+
+              if (proj && (!proj.sopLevel || proj.sopLevel < 4)) {
+                const admins = await sbSelect('users', {
+                  select: 'id',
+                  filters: { role: 'in.(ADMIN,MANAGER)' }
+                })
+                const adminIds = admins.map((a: any) => a.id)
+
+                if (adminIds.length > 0) {
+                  await notifyMany(adminIds, {
+                    type: 'SOP_ALERT',
+                    title: `💡 60% Videos Posted: ${proj.name}`,
+                    message: `${posted} of ${total} videos are posted (${Math.round((posted/total)*100)}%). Scripting team should start SOP Level 4 for the next cycle.`,
+                    link: `/sop?projectId=${updated.projectId}`,
+                  })
+                }
+              }
+            }
+          } catch (err) {
+            console.error('[content posted trigger] failed:', err)
+          }
+        }
       } else if (body.status === 'REVIEW') {
         await notify({
           userId: clientId,

@@ -210,6 +210,50 @@ async function getStats(userId: string, role: string) {
 
   const pendingLoans = loans.reduce((acc: number, item: any) => acc + (parseFloat(item.amount) || 0), 0)
 
+  // --- 60% completion check for SOP Level 4 scripting follow-up ---
+  const pendingScriptingAlerts: { id: string; name: string; posted: number; total: number; pct: number }[] = []
+  if (isAdmin || isManager) {
+    const activeProjectsList = await safe(() => sbSelect('projects', {
+      select: 'id,name,sopLevel',
+      filters: { status: 'eq.ACTIVE' }
+    }), [] as any[])
+
+    const activeProjectIds = activeProjectsList.map((p: any) => p.id)
+    if (activeProjectIds.length > 0) {
+      const activeProjectContent = await safe(() => sbSelect('content', {
+        select: 'id,projectId,status,type',
+        filters: { projectId: `in.(${activeProjectIds.join(',')})` }
+      }), [] as any[])
+
+      const contentByProject = new Map<string, any[]>()
+      for (const c of activeProjectContent) {
+        if (!c.projectId) continue
+        const arr = contentByProject.get(c.projectId) ?? []
+        arr.push(c)
+        contentByProject.set(c.projectId, arr)
+      }
+
+      for (const p of activeProjectsList) {
+        const items = contentByProject.get(p.id) ?? []
+        const videos = items.filter((c: any) => c.type === 'REEL' || c.type === 'VIDEO')
+        const trackedItems = videos.length > 0 ? videos : items
+        const totalTracked = trackedItems.length
+        const postedTracked = trackedItems.filter((c: any) => c.status === 'POSTED').length
+        const pct = totalTracked > 0 ? Math.round((postedTracked / totalTracked) * 100) : 0
+        
+        if (totalTracked > 0 && pct >= 60 && (!p.sopLevel || p.sopLevel < 4)) {
+          pendingScriptingAlerts.push({
+            id: p.id,
+            name: p.name,
+            posted: postedTracked,
+            total: totalTracked,
+            pct,
+          })
+        }
+      }
+    }
+  }
+
   return {
     totalTasks, todoTasks, urgentTasks, overdueTasks,
     totalContent, editingContent,
@@ -226,6 +270,7 @@ async function getStats(userId: string, role: string) {
     clientPaid,
     clientTotalValue,
     pendingLoans,
+    pendingScriptingAlerts,
   }
 }
 
@@ -298,6 +343,33 @@ export default async function OverviewPage() {
       <TopBar title={greet(user.name)} />
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        {/* Scripting follow-up alerts (60% threshold reached) */}
+        {(isAdmin || user.role === 'MANAGER') && stats.pendingScriptingAlerts && stats.pendingScriptingAlerts.length > 0 && (
+          <div className="space-y-2">
+            {stats.pendingScriptingAlerts.map((alert: any) => (
+              <div key={alert.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50 border border-amber-250 rounded-lg px-4 py-3 shadow-sm">
+                <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                  <AlertCircle className="text-amber-600 flex-shrink-0 mt-0.5" size={16} />
+                  <div>
+                    <p className="text-xs font-bold text-stone-900">
+                      💡 Start Scripting (L4 SOP) for {alert.name}
+                    </p>
+                    <p className="text-[11px] text-stone-600 mt-0.5">
+                      Campaign is at <strong>{alert.pct}%</strong> completion ({alert.posted}/{alert.total} videos posted). Scripting team should start SOP Level 4 script approval for the next month's batch.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={`/sop?projectId=${alert.id}`}
+                  className="text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3.5 py-1.5 rounded transition-colors text-center whitespace-nowrap self-start sm:self-auto"
+                >
+                  Configure & Start L4
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Recent notifications */}
         {recentNotifications.length > 0 && (
           <div className={`bg-white rounded-lg border ${hasUnreadNotifications ? 'border-blue-200' : 'border-stone-100'}`}>
