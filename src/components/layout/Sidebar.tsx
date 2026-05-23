@@ -11,7 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useUIStore } from '@/store/ui.store'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { TAHA_LOGO } from '@/lib/logo'
 
 const NAV_ITEMS = [
@@ -54,6 +54,11 @@ export function Sidebar() {
   const { user, logout } = useAuth()
   const { sidebarOpen, setSidebarOpen } = useUIStore()
   const [crmOpen, setCrmOpen] = useState(pathname.startsWith('/crm'))
+  
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const effectiveRole = user && ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
     ? 'EMPLOYEE'
@@ -62,6 +67,12 @@ export function Sidebar() {
   const visibleItems = NAV_ITEMS.filter(item => user && effectiveRole && item.roles.includes(effectiveRole))
   const showCrm = user && ['ADMIN','MANAGER'].includes(user.role)
   const crmActive = pathname.startsWith('/crm')
+
+  if (!mounted) {
+    return (
+      <aside className="fixed top-0 left-0 h-full w-56 z-30 bg-[#0F0F14] border-r border-white/5 lg:translate-x-0 -translate-x-full" />
+    )
+  }
 
   return (
     <>

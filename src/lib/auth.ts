@@ -30,7 +30,8 @@ export async function verifyToken(token: string): Promise<AuthUser | null> {
   try {
     const { payload } = await jwtVerify(token, SECRET)
     return payload as unknown as AuthUser
-  } catch {
+  } catch (err) {
+    console.error('[JWT VERIFICATION ERROR]', err)
     return null
   }
 }
@@ -59,9 +60,4 @@ export function getSessionCookieOptions() {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax' as const,
-    maxAge: COOKIE_MAX_AGE,
-    path: '/',
-  }
-}
-
-export { COOKIE_NAME }
+    maxAge: COOK

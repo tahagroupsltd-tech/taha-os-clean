@@ -28,9 +28,16 @@ export default function GlobalError({
         <h1 className="text-xl font-semibold text-stone-900 mb-2">
           Unexpected error
         </h1>
-        <p className="text-sm text-stone-500 mb-2 leading-relaxed">
-          An error occurred while loading this page. This has been logged automatically.
-        </p>
+        <div className="text-left bg-red-50 border border-red-200 rounded-lg p-3.5 mb-6 max-h-60 overflow-y-auto">
+          <p className="text-xs font-bold text-red-800 font-mono">
+            {error?.name || 'Error'}: {error?.message || 'Unknown error'}
+          </p>
+          {error?.stack && (
+            <pre className="text-[10px] text-red-700 font-mono mt-2 whitespace-pre-wrap leading-tight">
+              {error.stack}
+            </pre>
+          )}
+        </div>
         {error?.digest && (
           <p className="text-[11px] text-stone-400 font-mono mb-6">
             ID: {error.digest}
@@ -46,14 +53,4 @@ export default function GlobalError({
             Try again
           </button>
           <a
-            href="/overview"
-            className="inline-flex items-center gap-2 bg-white border border-stone-200 text-stone-700
-                       text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-stone-50 transition-colors"
-          >
-            Go home
-          </a>
-        </div>
-      </div>
-    </div>
-  )
-}
+            href=

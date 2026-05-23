@@ -14,6 +14,10 @@ enum Role {
   MANAGER
   EMPLOYEE
   CLIENT
+  EDITOR
+  SCRIPTWRITER
+  GRAPHIC_DESIGNER
+  WEB_DESIGNER
 }
 
 enum ProjectStatus {
@@ -102,11 +106,15 @@ model User {
   contentItems    Content[] @relation("ContentAssignee")
   contentCreated  Content[] @relation("ContentCreator")
   events          Event[]   @relation("EventOwner")
-  notes           Note[]    @relation("NoteOwner")
-  transactions    Transaction[] @relation("TransactionOwner")
-  reports         DailyReport[] @relation("ReportOwner")
-  notifications   Notification[] @relation("NotificationRecipient")
-  gcalToken       GoogleCalendarToken?
+  notes            Note[]    @relation("NoteOwner")
+  transactions     Transaction[] @relation("TransactionOwner")
+  reports          DailyReport[] @relation("ReportOwner")
+  notifications    Notification[] @relation("NotificationRecipient")
+  gcalToken        GoogleCalendarToken?
+  invoicesCreated  Invoice[]     @relation("OwnerInvoices")
+  invoicesReceived Invoice[]     @relation("ClientInvoices")
+  timeLogs         TimeLog[]
+  sopCompleted     SopProgress[]
 
   // CRM relations
   crmCompaniesCreated  CrmCompany[]  @relation("CrmCompanyCreator")
@@ -173,6 +181,8 @@ model Project {
   transactions Transaction[]
   crmLeads     CrmLead[]
   crmDeals     CrmDeal[]
+  invoices     Invoice[]
+  sopProgress  SopProgress[]
 
   @@map("projects")
 }
@@ -195,29 +205,34 @@ model Task {
   assignedTo   User?    @relation("AssignedTo", fields: [assignedToId], references: [id])
   createdBy    User     @relation("CreatedBy", fields: [createdById], references: [id])
   project      Project? @relation(fields: [projectId], references: [id])
+  timeLogs     TimeLog[]
 
   @@map("tasks")
 }
 
 model Content {
-  id           String        @id @default(cuid())
-  title        String
-  type         ContentType
-  status       ContentStatus @default(IDEA)
-  description  String?
-  driveLink    String?
-  caption      String?
-  postDate     DateTime?
-  assigneeId   String?
-  createdById  String
-  projectId    String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id               String        @id @default(cuid())
+  title            String
+  type             ContentType
+  status           ContentStatus @default(IDEA)
+  description      String?
+  driveLink        String?
+  scriptLink       String?
+  scriptApproved   Boolean       @default(false)
+  scriptApprovedBy String?
+  caption          String?
+  postDate         DateTime?
+  assigneeId       String?
+  createdById      String
+  projectId        String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   // Relations
   assignee     User?    @relation("ContentAssignee", fields: [assigneeId], references: [id])
   createdBy    User     @relation("ContentCreator", fields: [createdById], references: [id])
   project      Project? @relation(fields: [projectId], references: [id])
+  metrics      ContentMetrics[]
 
   @@map("content")
 }
@@ -339,7 +354,7 @@ model CrmCompany {
   notes       String?
   createdById String?
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   createdBy   User?        @relation("CrmCompanyCreator", fields: [createdById], references: [id])
   contacts    CrmContact[]
@@ -359,7 +374,7 @@ model CrmContact {
   notes       String?
   createdById String?
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   company     CrmCompany?   @relation(fields: [companyId], references: [id])
   createdBy   User?         @relation("CrmContactCreator", fields: [createdById], references: [id])
@@ -384,7 +399,7 @@ model CrmLead {
   expectedCloseDate DateTime? @db.Date
   createdById       String?
   createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  updatedAt         DateTime @default(now()) @updatedAt
 
   contact     CrmContact? @relation(fields: [contactId], references: [id])
   company     CrmCompany? @relation(fields: [companyId], references: [id])
@@ -414,7 +429,7 @@ model CrmDeal {
   notes        String?
   createdById  String?
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime @default(now()) @updatedAt
 
   lead        CrmLead?    @relation(fields: [leadId], references: [id])
   contact     CrmContact? @relation(fields: [contactId], references: [id])
@@ -440,7 +455,7 @@ model CrmActivity {
   contactId   String?
   createdById String?
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   lead        CrmLead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
   deal        CrmDeal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
@@ -450,4 +465,98 @@ model CrmActivity {
   @@index([leadId])
   @@index([dealId])
   @@map("crm_activities")
+}
+
+model Loan {
+  id        String    @id @default(cuid())
+  title     String
+  amount    Decimal   @db.Decimal(12, 2)
+  status    String    @default("PENDING")
+  due_date  DateTime?
+  notes     String?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now()) @updatedAt
+
+  @@map("loans")
+}
+
+model Invoice {
+  id                String    @id @default(cuid())
+  invoice_number    String
+  client_id         String?
+  project_id        String?
+  owner_id          String
+  line_items        Json
+  subtotal          Decimal   @db.Decimal(12, 2)
+  tax_rate          Decimal   @db.Decimal(12, 2)
+  tax_amount        Decimal   @db.Decimal(12, 2)
+  total             Decimal   @db.Decimal(12, 2)
+  status            String    @default("DRAFT")
+  due_date          DateTime?
+  notes             String?
+  type              String    @default("INVOICE")
+  scope_of_work     String?
+  client_location   String?
+  important_details String?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @default(now()) @updatedAt
+
+  // Relations
+  client            User?     @relation("ClientInvoices", fields: [client_id], references: [id])
+  project           Project?  @relation(fields: [project_id], references: [id])
+  owner             User      @relation("OwnerInvoices", fields: [owner_id], references: [id])
+
+  @@map("invoices")
+}
+
+model TimeLog {
+  id         String    @id @default(cuid())
+  task_id    String
+  user_id    String
+  started_at DateTime  @default(now())
+  ended_at   DateTime?
+  minutes    Int
+  note       String?
+  created_at DateTime  @default(now())
+
+  // Relations
+  task       Task      @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("time_logs")
+}
+
+model SopProgress {
+  id            String   @id @default(cuid())
+  projectId     String
+  level         Int
+  stepKey       String
+  completedAt   DateTime @default(now())
+  completedById String
+
+  // Relations
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  completedBy   User     @relation(fields: [completedById], references: [id], onDelete: Cascade)
+
+  @@map("sop_progress")
+}
+
+model ContentMetrics {
+  id          String   @id @default(cuid())
+  content_id  String
+  platform    String   @default("INSTAGRAM")
+  post_url    String?
+  views       Int      @default(0)
+  likes       Int      @default(0)
+  comments    Int      @default(0)
+  shares      Int      @default(0)
+  reach       Int      @default(0)
+  saved       Int      @default(0)
+  recorded_at DateTime @default(now())
+  created_at  DateTime @default(now())
+
+  // Relations
+  content     Content  @relation(fields: [content_id], references: [id], onDelete: Cascade)
+
+  @@map("content_metrics")
 }

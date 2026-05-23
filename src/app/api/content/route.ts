@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   if (!canCreateContent(user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { title, type, status, description, driveLink, caption, postDate, assigneeId, projectId } = body
+  const { title, type, status, description, driveLink, scriptLink, caption, postDate, assigneeId, projectId } = body
 
   if (!title || !type) {
     return NextResponse.json({ error: 'Title and type are required' }, { status: 400 })
@@ -65,6 +65,9 @@ export async function POST(req: NextRequest) {
     status: status ?? 'IDEA',
     description: finalDescription,
     driveLink: driveLink || null,
+    scriptLink: scriptLink || null,
+    scriptApproved: false,
+    scriptApprovedBy: null,
     caption: caption || null,
     postDate: postDate ? new Date(postDate).toISOString() : null,
     assigneeId: assigneeId || null,

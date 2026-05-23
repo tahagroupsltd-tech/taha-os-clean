@@ -23,20 +23,40 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const isEmployee = user.role === 'EMPLOYEE' || ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
   if (isEmployee) {
-    if (before.assigneeId !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    if (body.status === undefined) return NextResponse.json({ error: 'Employees can only update content status' }, { status: 403 })
-    body = {
-      status: body.status,
-      ...(body.driveLink !== undefined ? { driveLink: body.driveLink } : {}),
+    if (before.assigneeId !== user.id && before.createdById !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const patchable: Record<string, any> = {}
+    let hasField = false
+    if (body.status !== undefined) {
+      patchable.status = body.status
+      hasField = true
     }
+    if (body.driveLink !== undefined) {
+      patchable.driveLink = body.driveLink
+      hasField = true
+    }
+    if (body.scriptLink !== undefined) {
+      patchable.scriptLink = body.scriptLink
+      hasField = true
+    }
+    if (!hasField) {
+      return NextResponse.json({ error: 'Employees can only update status, driveLink, or scriptLink' }, { status: 403 })
+    }
+    body = patchable
   }
 
   const patch: Record<string, any> = {}
-  const allowed = ['title', 'type', 'status', 'description', 'driveLink', 'caption', 'postDate', 'assigneeId', 'projectId']
+  const allowed = ['title', 'type', 'status', 'description', 'driveLink', 'scriptLink', 'scriptApproved', 'caption', 'postDate', 'assigneeId', 'projectId']
   for (const k of allowed) {
     if (body[k] !== undefined) {
       patch[k] = k === 'postDate' && body[k] ? new Date(body[k]).toISOString() : (body[k] ?? null)
     }
+  }
+
+  // If scriptApproved is newly set to true, set approved by name
+  if (body.scriptApproved === true && !before.scriptApproved) {
+    patch.scriptApprovedBy = user.name
+  } else if (body.scriptApproved === false && before.scriptApproved) {
+    patch.scriptApprovedBy = null
   }
 
   // Auto-calculate/update the editor deadline in description if postDate or description changes
@@ -78,6 +98,39 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         date: new Date(updated.postDate),
       } : null,
     })
+  }
+
+  // Script link updated → notify admin/managers (Script Heads)
+  if (body.scriptLink !== undefined && body.scriptLink !== before.scriptLink && body.scriptLink) {
+    try {
+      const admins = await sbSelect('users', {
+        select: 'id',
+        filters: { role: 'in.(ADMIN,MANAGER)' }
+      })
+      const adminIds = admins.map((a: any) => a.id)
+      if (adminIds.length > 0) {
+        await notifyMany(adminIds, {
+          type: 'SCRIPT_SUBMITTED',
+          title: `📝 Script submitted: ${updated?.title || before.title}`,
+          message: `${user.name} submitted a script doc for "${updated?.title || before.title}". Click to review and approve.`,
+          link: '/content',
+        })
+      }
+    } catch (e) {}
+  }
+
+  // Script approved → notify assignee/creator
+  if (body.scriptApproved === true && !before.scriptApproved) {
+    const recipientId = updated?.assigneeId || updated?.createdById
+    if (recipientId && recipientId !== user.id) {
+      await notify({
+        userId: recipientId,
+        type: 'SCRIPT_APPROVED',
+        title: `✅ Script Approved: ${updated?.title || before.title}`,
+        message: `Your script for "${updated?.title || before.title}" has been approved by ${user.name}.`,
+        link: '/content',
+      })
+    }
   }
 
   // Status changed → notify client

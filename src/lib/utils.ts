@@ -164,14 +164,28 @@ export const TRANSACTION_CATEGORY_LABELS: Record<TransactionCategory, string> = 
 }
 
 // ── Currency (INR) ────────────────────────────────────────
+// NOTE: We use manual formatting instead of Intl.NumberFormat('en-IN') to
+// avoid server/client hydration mismatches — Node.js on Vercel uses a
+// stripped-down ICU dataset and formats numbers differently from Chrome.
 export function formatMoney(amount: string | number): string {
   const n = typeof amount === 'string' ? parseFloat(amount) : amount
   if (isNaN(n)) return '₹0'
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(n)
+  const abs = Math.round(Math.abs(n))
+  const s = abs.toString()
+  // Indian grouping: last 3 digits, then groups of 2
+  let formatted = ''
+  if (s.length <= 3) {
+    formatted = s
+  } else {
+    formatted = s.slice(-3)
+    let rest = s.slice(0, -3)
+    while (rest.length > 2) {
+      formatted = rest.slice(-2) + ',' + formatted
+      rest = rest.slice(0, -2)
+    }
+    formatted = rest + ',' + formatted
+  }
+  return (n < 0 ? '-₹' : '₹') + formatted
 }
 
 export function formatDateTime(date: string | Date | null | undefined): string {
@@ -271,21 +285,4 @@ export function getTaskUrgencyColors(deadline: string | null | undefined, status
   // < 3 days
   if (diff < 3 * 24 * 60 * 60 * 1000) {
     return {
-      cardClasses: 'bg-amber-50/20 border-amber-200/80 text-stone-900',
-      badgeClasses: 'bg-amber-50 text-amber-700 border-amber-200',
-      textClasses: 'text-amber-700 font-semibold',
-      timeLeftStr: `${formatDuration(diff)} left`,
-      isOverdue: false,
-    }
-  }
-
-  // Safe (> 3 days)
-  return {
-    cardClasses: 'bg-green-50/10 border-green-100 text-stone-900',
-    badgeClasses: 'bg-green-50/50 text-green-700 border-green-100',
-    textClasses: 'text-green-600',
-    timeLeftStr: `${formatDuration(diff)} left`,
-    isOverdue: false,
-  }
-}
-
+      ca

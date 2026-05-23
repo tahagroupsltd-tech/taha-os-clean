@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
 import { sbSelect, sbInsert, sbFindOne, EVENT_SELECT, nowTs } from '@/lib/supa'
 import { syncOsEventToGcal } from '@/lib/gcal'
+import { notify } from '@/lib/notify'
 
 export const dynamic = 'force-dynamic'
 
@@ -90,6 +91,36 @@ export async function POST(req: NextRequest) {
     startTime: event.startTime,
     endTime: event.endTime,
   }).catch(() => {})
+
+  // Notify the client if the event is a meeting/call and is linked to a project
+  if (projectId && (event.type === 'MEETING' || event.type === 'CALL')) {
+    try {
+      const proj = await sbFindOne('projects', {
+        select: 'id,name,clientId',
+        filters: { id: `eq.${projectId}` },
+      })
+      if (proj && proj.clientId && proj.clientId !== user.id) {
+        const dateStr = new Date(event.startTime).toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        })
+        const timeStr = new Date(event.startTime).toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+        await notify({
+          userId: proj.clientId,
+          type: 'GENERAL',
+          title: `📅 New Meeting Scheduled: ${event.title}`,
+          message: `A meeting has been scheduled for project "${proj.name}" on ${dateStr} at ${timeStr}.`,
+          link: '/calendar',
+        })
+      }
+    } catch (err) {
+      console.error('[event notify client] failed:', err)
+    }
+  }
 
   return NextResponse.json({ data: full }, { status: 201 })
 }

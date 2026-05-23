@@ -33,6 +33,7 @@ import {
   ListTodo,
   ExternalLink,
   Scissors,
+  FileText,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -65,6 +66,8 @@ interface CalendarItem {
   status?: string | null
   priority?: string | null
   driveLink?: string | null
+  scriptLink?: string | null
+  scriptApproved?: boolean
   originalItem: any
 }
 
@@ -232,13 +235,9 @@ export default function CalendarPage() {
   const [typeFilter, setTypeFilter] = useState('ALL')
   const [projectFilter, setProjectFilter] = useState('ALL')
 
-  // Live countdown ticker updating every 30s
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(new Date())
-    }, 30000)
-    return () => clearInterval(interval)
-  }, [])
+  const [mounted, setMounted] = useState(false)
+
+  // ── ALL hooks must be declared before any early returns (Rules of Hooks) ──
 
   const monthStart = useMemo(() => {
     const d = new Date(cursor)
@@ -281,18 +280,6 @@ export default function CalendarPage() {
     }
   }, [monthStart, monthEnd])
 
-  useEffect(() => {
-    fetchEvents()
-  }, [fetchEvents])
-
-  useEffect(() => {
-    if (user?.role !== 'CLIENT') {
-      fetch('/api/projects')
-        .then((r) => r.json())
-        .then((j) => setProjects(j.data ?? []))
-    }
-  }, [user])
-
   // Build the calendar grid (6 rows x 7 cols)
   const days = useMemo(() => {
     const startDay = new Date(monthStart)
@@ -305,6 +292,7 @@ export default function CalendarPage() {
   }, [monthStart])
 
   // Map and filter all items into a unified calendar items structure
+
   const calendarItems = useMemo(() => {
     const items: CalendarItem[] = []
 
@@ -376,6 +364,8 @@ export default function CalendarPage() {
           projectId: c.projectId ?? null,
           status: c.status,
           driveLink: c.driveLink ?? null,
+          scriptLink: c.scriptLink ?? null,
+          scriptApproved: c.scriptApproved ?? false,
           originalItem: c,
         })
       }
@@ -395,6 +385,8 @@ export default function CalendarPage() {
           projectId: c.projectId ?? null,
           status: c.status,
           driveLink: c.driveLink ?? null,
+          scriptLink: c.scriptLink ?? null,
+          scriptApproved: c.scriptApproved ?? false,
           originalItem: c,
         })
       }
@@ -429,6 +421,40 @@ export default function CalendarPage() {
     }
     return map
   }, [calendarItems])
+
+  useEffect(() => { setMounted(true) }, [])
+
+  // Live countdown ticker updating every 30s
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => { fetchEvents() }, [fetchEvents])
+
+  useEffect(() => {
+    if (user?.role !== 'CLIENT') {
+      fetch('/api/projects')
+        .then((r) => r.json())
+        .then((j) => setProjects(j.data ?? []))
+    }
+  }, [user])
+
+  // ── End hooks — early returns allowed below ───────────────────────────────
+
+  if (!mounted) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden bg-stone-50">
+        <TopBar title="Calendar" />
+        <div className="flex-1 p-5">
+          <div className="animate-pulse space-y-4">
+            <div className="h-10 bg-stone-200 rounded w-1/4" />
+            <div className="h-40 bg-stone-200 rounded" />
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const openCreate = (forDate?: string) => {
     setEditing(null)
@@ -838,6 +864,28 @@ export default function CalendarPage() {
                       </a>
                     </div>
                   )}
+
+                {/* Script Link (Content only) */}
+                {(selectedItem.calendarType === 'content_post' || selectedItem.calendarType === 'content_edit') &&
+                  selectedItem.scriptLink && (
+                    <div className="pt-1 flex flex-col gap-1">
+                      <a
+                        href={selectedItem.scriptLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-100 rounded-md py-1.5 px-3 transition-colors w-full"
+                      >
+                        <FileText size={12} />
+                        <span className="truncate">Open Script Document</span>
+                      </a>
+                      <div className="text-[10px] text-center text-stone-500">
+                        Status:{' '}
+                        <span className={selectedItem.scriptApproved ? 'text-green-600 font-semibold' : 'text-amber-600 font-semibold'}>
+                          {selectedItem.scriptApproved ? 'Approved' : 'Pending Approval'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
               </div>
 
               {/* Description/Notes */}
@@ -991,12 +1039,4 @@ export default function CalendarPage() {
             >
               Cancel
             </Button>
-            <Button size="sm" className="flex-1" loading={saving} onClick={handleSave}>
-              {editing ? 'Save changes' : 'Create event'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    </div>
-  )
-}
+            <Butto

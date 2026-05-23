@@ -18,16 +18,38 @@ import type { Project, ProjectStatus, KanbanStage } from '@/types'
 import {
   Plus, CheckSquare, FileVideo, Pencil, Trash2, ArrowRight,
   LayoutGrid, Kanban, IndianRupee, User, Calendar, GripVertical, X,
-  ChevronRight,
+  ChevronRight, FileSpreadsheet, Loader2, Video
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ClientProjectsView } from '@/components/client/ClientProjectsView'
 
 const STATUS_OPTIONS = Object.entries(PROJECT_STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))
 
-const KANBAN_STAGES: KanbanStage[] = [
-  'LEAD', 'PROPOSAL_SENT', 'ONBOARDING', 'ACTIVE', 'DELIVERED', 'CLOSED',
-]
+const KANBAN_STAGES: KanbanStage[] = ['LEAD', 'PROPOSAL_SENT', 'ONBOARDING', 'ACTIVE', 'DELIVERED', 'CLOSED']
+
+const SOP_LEVEL_LABELS: Record<number, string> = {
+  1: 'L1 — Onboarding',
+  2: 'L2 — PM Setup',
+  3: 'L3 — Script Prep',
+  4: 'L4 — Script Approval',
+  5: 'L5 — Shoot Logistics',
+  6: 'L6 — Shoot Day',
+  7: 'L7 — Post-Prod',
+}
+
+function safeFormatDate(dateStr: string | null | undefined, fallback = 'None scheduled'): string {
+  if (!dateStr) return fallback
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return fallback
+    return d.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+    })
+  } catch {
+    return fallback
+  }
+}
 
 const SOP_LEVELS = [
   { value: '', label: 'No stage' },
@@ -76,29 +98,20 @@ const EMPTY: ProjectForm = {
   value: '',
 }
 
-type ViewMode = 'grid' | 'board'
+type ViewMode = 'grid' | 'board' | 'excel'
 
 function getStoredView(): ViewMode {
   if (typeof window === 'undefined') return 'grid'
-  return (localStorage.getItem('projects_view') as ViewMode) ?? 'grid'
+  const val = localStorage.getItem('projects_view')
+  if (val === 'grid' || val === 'board' || val === 'excel') return val
+  return 'grid'
 }
 
 export default function ProjectsPage() {
   const user = useAuthStore((s) => s.user)
+  const [mounted, setMounted] = useState(false)
 
-  // ── Client portal: render a completely separate, brand-tailored view ─────────
-  if (user?.role === 'CLIENT') {
-    return (
-      <div className="flex flex-col h-full overflow-hidden">
-        <TopBar title="My Projects" />
-        <div className="flex-1 overflow-y-auto p-5">
-          <ClientProjectsView />
-        </div>
-      </div>
-    )
-  }
-  // ────────────────────────────────────────────────────────────────────────────
-
+  // ── ALL hooks declared before any early returns (Rules of Hooks) ──────────
   const [projects, setProjects] = useState<Project[]>([])
   const [clients, setClients] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
@@ -125,12 +138,84 @@ export default function ProjectsPage() {
   const draggingId = useRef<string | null>(null)
   const [dragOverCol, setDragOverCol] = useState<KanbanStage | null>(null)
 
-  // Load view preference
-  useEffect(() => { setView(getStoredView()) }, [])
+  // Excel view data
+  const [excelData, setExcelData] = useState<any[]>([])
+  const [excelLoading, setExcelLoading] = useState(false)
 
-  const switchView = (v: ViewMode) => {
-    setView(v)
-    localStorage.setItem('projects_view', v)
+  const isFounder = user?.role === 'ADMIN'
+
+  const fetchExcelData = async () => {
+    setExcelLoading(true)
+    try {
+      const res = await fetch('/api/clients/active')
+      const json = await res.json()
+      setExcelData(json.data ?? [])
+    } catch (err) {
+      console.error('[projects-excel] failed to fetch active clients:', err)
+    } finally {
+      setExcelLoading(false)
+    }
+  }
+
+  useEffect(() => { setMounted(true) }, [])
+
+  useEffect(() => {
+    if (view === 'excel') {
+      fetchExcelData()
+    }
+  }, [view])
+
+  const handleUpdateSopLevelExcel = async (projectId: string, sopLevel: number) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sopLevel }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success('SOP Level updated')
+      setExcelData(prev =>
+        prev.map(item => item.projectId === projectId ? { ...item, sopLevel } : item)
+      )
+      fetchProjects()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update SOP Level')
+    }
+  }
+
+  const handleUpdateStatusExcel = async (projectId: string, status: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success('Status updated')
+      setExcelData(prev =>
+        prev.map(item => item.projectId === projectId ? { ...item, projectStatus: status } : item)
+      )
+      fetchProjects()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update Status')
+    }
+  }
+
+  const handleUpdateValueExcel = async (projectId: string, newValue: number) => {
+    if (isNaN(newValue) || newValue < 0) return toast.error('Invalid value')
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: newValue }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success('Project value updated')
+      fetchExcelData()
+      fetchProjects()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update value')
+    }
   }
 
   const fetchProjects = async () => {
@@ -141,8 +226,9 @@ export default function ProjectsPage() {
     setLoading(false)
   }
 
+  // Load view preference
+  useEffect(() => { setView(getStoredView()) }, [])
   useEffect(() => { fetchProjects() }, [])
-
   useEffect(() => {
     if (user?.role === 'ADMIN' || user?.role === 'MANAGER') {
       fetch('/api/users?role=CLIENT')
@@ -150,6 +236,38 @@ export default function ProjectsPage() {
         .then((j) => setClients(j.data ?? []))
     }
   }, [user])
+  // ── End hooks — early returns allowed below ───────────────────────────────
+
+  if (!mounted) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden bg-stone-50">
+        <TopBar title="Projects" />
+        <div className="flex-1 p-5">
+          <div className="animate-pulse space-y-4">
+            <div className="h-10 bg-stone-200 rounded w-1/4" />
+            <div className="h-40 bg-stone-200 rounded" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Client portal: render a completely separate, brand-tailored view ──────
+  if (user?.role === 'CLIENT') {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <TopBar title="My Projects" />
+        <div className="flex-1 overflow-y-auto p-5">
+          <ClientProjectsView />
+        </div>
+      </div>
+    )
+  }
+
+  const switchView = (v: ViewMode) => {
+    setView(v)
+    localStorage.setItem('projects_view', v)
+  }
 
   const openCreate = () => {
     setEditingId(null)
@@ -307,6 +425,17 @@ export default function ProjectsPage() {
                 )}
               >
                 <Kanban size={12} /> Board
+              </button>
+              <button
+                onClick={() => switchView('excel')}
+                className={cn(
+                  'flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition-colors',
+                  view === 'excel'
+                    ? 'bg-white shadow-sm text-stone-900'
+                    : 'text-stone-500 hover:text-stone-700'
+                )}
+              >
+                <FileSpreadsheet size={12} /> Excel
               </button>
             </div>
             {canManage && (
@@ -501,6 +630,219 @@ export default function ProjectsPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── EXCEL SPREADSHEET VIEW ── */}
+      {view === 'excel' && (
+        <div className="flex-1 overflow-auto p-5 bg-stone-50/30">
+          {excelLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-2">
+              <Loader2 size={24} className="text-stone-400 animate-spin" />
+              <p className="text-xs text-stone-500">Loading spreadsheet data...</p>
+            </div>
+          ) : excelData.length === 0 ? (
+            <div className="text-center py-16 bg-white border border-stone-200 rounded-xl p-8">
+              <FileSpreadsheet size={32} className="text-stone-300 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-stone-700">No active campaigns found</p>
+              <p className="text-xs text-stone-400 mt-1">Make sure you have projects marked as ACTIVE or PAUSED with a client assigned.</p>
+            </div>
+          ) : (
+            <div className="bg-white border border-stone-200 rounded-xl shadow-sm overflow-hidden min-w-[1200px]">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-xs text-stone-600">
+                  <thead className="bg-stone-50 border-b border-stone-200 text-stone-700 font-semibold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="px-4 py-3 border-r border-stone-200 min-w-[150px]">Client</th>
+                      <th className="px-4 py-3 border-r border-stone-200 min-w-[200px]">Campaign / Project</th>
+                      <th className="px-4 py-3 border-r border-stone-200 w-[120px]">Status</th>
+                      <th className="px-4 py-3 border-r border-stone-200 w-[160px]">SOP Progress</th>
+                      <th className="px-4 py-3 border-r border-stone-200 min-w-[120px]">Shoot Logistics</th>
+                      <th className="px-4 py-3 border-r border-stone-200 min-w-[180px]">Next Video Post</th>
+                      <th className="px-4 py-3 border-r border-stone-200 min-w-[180px]">Last Posted Video</th>
+                      <th className="px-4 py-3 border-r border-stone-200 min-w-[180px]">Month's Last Video</th>
+                      <th className="px-4 py-3 border-r border-stone-200 w-[150px]">Scripts Status</th>
+                      {isFounder && (
+                        <>
+                          <th className="px-4 py-3 border-r border-stone-200 w-[140px]">Project Value (₹)</th>
+                          <th className="px-4 py-3 w-[140px]">Pending Dues (₹)</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-200">
+                    {excelData.map((item) => {
+                      const initials = item.clientName ? item.clientName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : '??'
+                      
+                      return (
+                        <tr key={item.projectId} className="hover:bg-stone-50/50 transition-colors">
+                          {/* Client */}
+                          <td className="px-4 py-2.5 border-r border-stone-200 font-medium text-stone-900">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                                {initials}
+                              </div>
+                              <span className="truncate max-w-[120px]" title={item.clientName}>
+                                {item.clientName}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Campaign / Project */}
+                          <td className="px-4 py-2.5 border-r border-stone-200">
+                            <Link href={`/projects/${item.projectId}`} className="font-semibold text-stone-800 hover:text-stone-900 hover:underline block truncate max-w-[180px]" title={item.projectName}>
+                              {item.projectName}
+                            </Link>
+                          </td>
+
+                          {/* Status */}
+                          <td className="px-4 py-2.5 border-r border-stone-200">
+                            <select
+                              value={item.projectStatus}
+                              onChange={(e) => handleUpdateStatusExcel(item.projectId, e.target.value)}
+                              className="w-full text-xs font-semibold text-stone-700 bg-stone-50 border border-stone-200 rounded px-1.5 py-1 focus:outline-none cursor-pointer hover:bg-stone-100 transition-colors"
+                            >
+                              <option value="ACTIVE">ACTIVE</option>
+                              <option value="PAUSED">PAUSED</option>
+                              <option value="COMPLETED">COMPLETED</option>
+                              <option value="ARCHIVED">ARCHIVED</option>
+                            </select>
+                          </td>
+
+                          {/* SOP Progress */}
+                          <td className="px-4 py-2.5 border-r border-stone-200">
+                            <select
+                              value={item.sopLevel}
+                              onChange={(e) => handleUpdateSopLevelExcel(item.projectId, parseInt(e.target.value))}
+                              className="w-full text-xs font-semibold text-stone-700 bg-stone-50 border border-stone-200 rounded px-1.5 py-1 focus:outline-none cursor-pointer hover:bg-stone-100 transition-colors"
+                            >
+                              {Object.entries(SOP_LEVEL_LABELS).map(([lvl, label]) => (
+                                <option key={lvl} value={lvl}>{label}</option>
+                              ))}
+                            </select>
+                          </td>
+
+                          {/* Shoot Logistics */}
+                          <td className="px-4 py-2.5 border-r border-stone-200 text-stone-700 font-medium">
+                            {item.nextShoot ? (
+                              <div className="flex items-center gap-1.5">
+                                <Calendar size={11} className="text-stone-400 shrink-0" />
+                                <span>
+                                  {safeFormatDate(item.nextShoot.startTime)}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-stone-400 font-normal">None scheduled</span>
+                            )}
+                          </td>
+
+                          {/* Next Video Post */}
+                          <td className="px-4 py-2.5 border-r border-stone-200 text-stone-700 font-medium">
+                            {item.nextPost ? (
+                              <div className="flex items-center gap-1.5">
+                                <Video size={11} className="text-stone-400 shrink-0" />
+                                <span className="truncate max-w-[150px]" title={`${safeFormatDate(item.nextPost.postDate)} - ${item.nextPost.title}`}>
+                                  {safeFormatDate(item.nextPost.postDate)}{' '}
+                                  ({item.nextPost.title})
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-stone-400 font-normal">None scheduled</span>
+                            )}
+                          </td>
+
+                          {/* Last Posted Video */}
+                          <td className="px-4 py-2.5 border-r border-stone-200 text-stone-700 font-medium">
+                            {item.lastPost ? (
+                              <div className="flex items-center gap-1.5">
+                                <Video size={11} className="text-stone-400 shrink-0" />
+                                <span className="truncate max-w-[150px]" title={`${safeFormatDate(item.lastPost.postDate, 'None posted')} - ${item.lastPost.title}`}>
+                                  {safeFormatDate(item.lastPost.postDate, 'None posted')}{' '}
+                                  ({item.lastPost.title})
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-stone-400 font-normal">None posted</span>
+                            )}
+                          </td>
+
+                          {/* Month's Last Video */}
+                          <td className="px-4 py-2.5 border-r border-stone-200 text-stone-700 font-medium">
+                            {item.lastVideoCurrentMonth ? (
+                              <div className="flex items-center gap-1.5">
+                                <Video size={11} className="text-stone-400 shrink-0" />
+                                <span className="truncate max-w-[150px]" title={`${safeFormatDate(item.lastVideoCurrentMonth.postDate)} - ${item.lastVideoCurrentMonth.title}`}>
+                                  {safeFormatDate(item.lastVideoCurrentMonth.postDate)}{' '}
+                                  ({item.lastVideoCurrentMonth.title})
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-stone-400 font-normal">None scheduled</span>
+                            )}
+                          </td>
+
+                          {/* Next Month Scripts */}
+                          <td className="px-4 py-2.5 border-r border-stone-200">
+                            <span className={cn(
+                              'font-bold px-1.5 py-0.5 rounded-[4px] text-[10px] border block text-center',
+                              item.nextMonthScriptsNeeded
+                                ? item.scriptStatusLabel?.includes('Next Month')
+                                  ? 'bg-red-50 text-red-700 border-red-200 animate-pulse'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
+                                : 'bg-stone-50 text-stone-600 border-stone-200'
+                            )}>
+                              {item.scriptStatusLabel}
+                            </span>
+                          </td>
+
+                          {/* Finance details (Founder only) */}
+                          {isFounder && (
+                            <>
+                              {/* Project Value */}
+                              <td className="px-4 py-2.5 border-r border-stone-200">
+                                <input
+                                  type="number"
+                                  defaultValue={item.projectValue}
+                                  onBlur={(e) => {
+                                    const val = parseFloat(e.target.value)
+                                    if (!isNaN(val) && val !== item.projectValue) {
+                                      handleUpdateValueExcel(item.projectId, val)
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      const val = parseFloat((e.target as HTMLInputElement).value)
+                                      if (!isNaN(val) && val !== item.projectValue) {
+                                        handleUpdateValueExcel(item.projectId, val)
+                                      }
+                                      (e.target as HTMLInputElement).blur()
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 border border-stone-200 rounded text-xs text-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-400 font-medium"
+                                  placeholder="Value"
+                                />
+                              </td>
+
+                              {/* Pending Dues */}
+                              <td className="px-4 py-2.5 font-bold">
+                                <span className={cn(item.outstandingBalance > 0 ? 'text-amber-600' : 'text-emerald-600')}>
+                                  {item.outstandingBalance > 0 ? (
+                                    formatMoney(item.outstandingBalance)
+                                  ) : (
+                                    'Fully Paid'
+                                  )}
+                                </span>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -817,3 +1159,4 @@ function ProjectCard({
     </div>
   )
 }
+                              

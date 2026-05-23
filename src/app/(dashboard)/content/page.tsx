@@ -13,6 +13,7 @@ import type { Content, ContentType, ContentStatus } from '@/types'
 import {
   Plus, Pencil, Trash2, ExternalLink,
   LayoutGrid, CalendarDays, ChevronLeft, ChevronRight, X,
+  FileText,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -53,12 +54,12 @@ const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 // ─── Form ─────────────────────────────────────────────────────────────────────
 interface ContentForm {
   title: string; type: ContentType; status: ContentStatus
-  description: string; driveLink: string; caption: string
+  description: string; driveLink: string; scriptLink: string; caption: string
   postDate: string; assigneeId: string; projectId: string
 }
 const EMPTY: ContentForm = {
   title: '', type: 'REEL', status: 'IDEA',
-  description: '', driveLink: '', caption: '',
+  description: '', driveLink: '', scriptLink: '', caption: '',
   postDate: '', assigneeId: '', projectId: '',
 }
 
@@ -252,15 +253,28 @@ function CalendarView({
                   <div className={`w-2 h-2 rounded-full flex-shrink-0 ${TYPE_DOT[item.type]}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-stone-900 truncate">{item.title}</p>
-                    <div className="flex items-center gap-2 text-[10px] text-stone-400 mt-0.5">
+                    <div className="flex items-center gap-2 text-[10px] text-stone-400 mt-0.5 flex-wrap">
                       <span>{item.type}</span>
                       {item.project && <><span>·</span><span>{item.project.name}</span></>}
                       {item.assignee && <><span>·</span><span>{item.assignee.name}</span></>}
+                      {item.scriptLink && (
+                        <>
+                          <span>·</span>
+                          <span className={item.scriptApproved ? 'text-emerald-600 font-medium' : 'text-amber-600 font-medium'}>
+                            {item.scriptApproved ? 'Script Approved' : 'Script Pending'}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <Badge className={contentStatusColor(item.status)}>
                     {CONTENT_STATUS_LABELS[item.status]}
                   </Badge>
+                  {item.scriptLink && (
+                    <a href={item.scriptLink} target="_blank" rel="noreferrer" className="p-1 rounded text-stone-300 hover:text-stone-600 hover:bg-stone-100" title="Open Script">
+                      <FileText size={11} />
+                    </a>
+                  )}
                   {canEdit && (
                     <button onClick={() => onEdit(item)} className="p-1 rounded text-stone-300 hover:text-stone-600 hover:bg-stone-100">
                       <Pencil size={11} />
@@ -299,6 +313,9 @@ export default function ContentPage() {
   const [form, setForm] = useState<ContentForm>(EMPTY)
   const [saving, setSaving] = useState(false)
 
+  const [mounted, setMounted] = useState(false)
+
+  // ── ALL hooks before any early returns (Rules of Hooks) ──────────────────
   const fetchContent = useCallback(async () => {
     setLoading(true)
     const params = new URLSearchParams()
@@ -312,15 +329,29 @@ export default function ContentPage() {
     setLoading(false)
   }, [filterStatus, filterType, filterProject])
 
+  useEffect(() => { setMounted(true) }, [])
   useEffect(() => { fetchContent() }, [fetchContent])
-
   useEffect(() => {
     if (user?.role === 'ADMIN' || user?.role === 'MANAGER') {
-      // Exclude CLIENTs — they cannot be assignees on content items
       fetch('/api/users?excludeRole=CLIENT').then(r => r.json()).then(j => setUsers(j.data ?? []))
       fetch('/api/projects').then(r => r.json()).then(j => setProjects(j.data ?? []))
     }
   }, [user])
+  // ── End hooks ────────────────────────────────────────────────────────────
+
+  if (!mounted) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden bg-stone-50">
+        <TopBar title="Content" />
+        <div className="flex-1 p-5">
+          <div className="animate-pulse space-y-4">
+            <div className="h-10 bg-stone-200 rounded w-1/4" />
+            <div className="h-40 bg-stone-200 rounded" />
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const openCreate = () => { setEditing(null); setForm(EMPTY); setModalOpen(true) }
 
@@ -329,11 +360,31 @@ export default function ContentPage() {
     setForm({
       title: item.title, type: item.type, status: item.status,
       description: item.description ?? '', driveLink: item.driveLink ?? '',
+      scriptLink: item.scriptLink ?? '',
       caption: item.caption ?? '',
       postDate: item.postDate ? item.postDate.split('T')[0] : '',
       assigneeId: item.assigneeId ?? '', projectId: item.projectId ?? '',
     })
     setModalOpen(true)
+  }
+
+  const handleApproveScript = async (approved: boolean) => {
+    if (!editing) return
+    try {
+      const res = await fetch(`/api/content/${editing.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scriptApproved: approved })
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      const json = await res.json()
+      const updated = json.data
+      setEditing(updated)
+      setItems(prev => prev.map(i => i.id === updated.id ? updated : i))
+      toast.success(approved ? 'Script approved' : 'Approval revoked')
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to update approval')
+    }
   }
 
   const handleSave = async () => {
@@ -344,6 +395,7 @@ export default function ContentPage() {
         ...form,
         postDate: form.postDate || null, assigneeId: form.assigneeId || null,
         projectId: form.projectId || null, driveLink: form.driveLink || null,
+        scriptLink: form.scriptLink || null,
         caption: form.caption || null, description: form.description || null,
       }
       const res = editing
@@ -510,38 +562,86 @@ export default function ContentPage() {
           <div className="col-span-2">
             <Input label="Title" value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="Content title" />
+              placeholder="Content title"
+              disabled={!isAdmin} />
           </div>
           <Select label="Type" options={TYPE_OPTIONS} value={form.type}
-            onChange={(e) => setForm({ ...form, type: e.target.value as ContentType })} />
+            onChange={(e) => setForm({ ...form, type: e.target.value as ContentType })}
+            disabled={!isAdmin} />
           <Select label="Status" options={STATUS_OPTIONS} value={form.status}
             onChange={(e) => setForm({ ...form, status: e.target.value as ContentStatus })} />
           <div className="col-span-2">
             <label className="text-xs font-medium text-stone-600 uppercase tracking-wide block mb-1.5">Description</label>
             <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
               placeholder="Brief, shoot notes, references..." rows={2}
-              className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400 resize-none" />
+              disabled={!isAdmin}
+              className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400 resize-none disabled:opacity-60" />
           </div>
           <Input label="Post Date" type="date" value={form.postDate}
-            onChange={(e) => setForm({ ...form, postDate: e.target.value })} />
+            onChange={(e) => setForm({ ...form, postDate: e.target.value })}
+            disabled={!isAdmin} />
           <Input label="Drive Link" type="url" value={form.driveLink}
             onChange={(e) => setForm({ ...form, driveLink: e.target.value })}
             placeholder="https://drive.google.com/..." />
+          <Input label="Script Doc Link" type="url" value={form.scriptLink}
+            onChange={(e) => setForm({ ...form, scriptLink: e.target.value })}
+            placeholder="https://docs.google.com/document/d/..." />
+          {editing && form.scriptLink && (
+            <div className="col-span-2 border border-stone-200 rounded-md p-3 bg-stone-50/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide">Script Approval</p>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    {editing.scriptApproved ? (
+                      <span className="text-green-600 font-medium">Approved by {editing.scriptApprovedBy}</span>
+                    ) : (
+                      <span className="text-amber-600 font-medium">Pending Script Head Approval</span>
+                    )}
+                  </p>
+                </div>
+                {isAdmin && (
+                  <div>
+                    {editing.scriptApproved ? (
+                      <button
+                        type="button"
+                        onClick={() => handleApproveScript(false)}
+                        className="text-xs font-medium text-red-600 hover:text-red-800 transition-colors"
+                      >
+                        Revoke Approval
+                      </button>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleApproveScript(true)}
+                        className="h-8 py-0 px-3 text-xs"
+                      >
+                        Approve Script
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           <div className="col-span-2">
             <label className="text-xs font-medium text-stone-600 uppercase tracking-wide block mb-1.5">Caption</label>
             <textarea value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })}
               placeholder="Post caption with hashtags..." rows={2}
-              className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400 resize-none" />
+              disabled={!isAdmin}
+              className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400 resize-none disabled:opacity-60" />
           </div>
           {users.length > 0 && (
             <Select label="Assignee" placeholder="Unassigned"
               options={users.map((u) => ({ value: u.id, label: u.name }))}
-              value={form.assigneeId} onChange={(e) => setForm({ ...form, assigneeId: e.target.value })} />
+              value={form.assigneeId} onChange={(e) => setForm({ ...form, assigneeId: e.target.value })}
+              disabled={!isAdmin} />
           )}
           {projects.length > 0 && (
             <Select label="Project" placeholder="No project"
               options={projects.map((p) => ({ value: p.id, label: p.name }))}
-              value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })} />
+              value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })}
+              disabled={!isAdmin} />
           )}
           <div className="col-span-2 flex gap-2 pt-1">
             <Button variant="secondary" size="sm" className="flex-1" onClick={() => setModalOpen(false)}>Cancel</Button>
@@ -578,9 +678,18 @@ function ContentCard({ item, canEdit, isAdmin, onEdit, onDelete, onStatusChange 
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1.5 mb-3">
+      <div className="flex items-center gap-1.5 mb-3 flex-wrap">
         <Badge className={contentStatusColor(item.status)}>{CONTENT_STATUS_LABELS[item.status]}</Badge>
         <span className="text-[10px] text-stone-400 bg-stone-50 rounded px-1.5 py-0.5 font-medium">{item.type}</span>
+        {item.scriptLink && (
+          <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium border ${
+            item.scriptApproved
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+              : 'bg-amber-50 text-amber-700 border-amber-100'
+          }`}>
+            {item.scriptApproved ? 'Script Approved' : 'Script Pending'}
+          </span>
+        )}
       </div>
       {item.description && (
         <p className="text-[11px] text-stone-500 mb-3 leading-relaxed line-clamp-2">{item.description}</p>
@@ -596,13 +705,11 @@ function ContentCard({ item, canEdit, isAdmin, onEdit, onDelete, onStatusChange 
             {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         )}
-        {item.driveLink && (
-          <a href={item.driveLink} target="_blank" rel="noreferrer"
-            className="p-1.5 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100" title="Open Drive">
-            <ExternalLink size={12} />
+        {item.scriptLink && (
+          <a href={item.scriptLink} target="_blank" rel="noreferrer"
+            className="p-1.5 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100" title="Open Script Document">
+            <FileText size={12} />
           </a>
         )}
-      </div>
-    </div>
-  )
-}
+        {item.driveLink && (
+          <a href={item.driveLin

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
 import { sbFindOne, sbUpdate, sbDelete, EVENT_SELECT } from '@/lib/supa'
 import { syncOsEventToGcal, deleteEntityCalendarEvents } from '@/lib/gcal'
+import { notify } from '@/lib/notify'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +43,36 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       startTime: updated.startTime,
       endTime: updated.endTime,
     }).catch(() => {})
+
+    // Notify the client if the event is updated, it's a meeting/call, and linked to a project
+    if (updated.projectId && (updated.type === 'MEETING' || updated.type === 'CALL')) {
+      try {
+        const proj = await sbFindOne('projects', {
+          select: 'id,name,clientId',
+          filters: { id: `eq.${updated.projectId}` },
+        })
+        if (proj && proj.clientId && proj.clientId !== user.id) {
+          const dateStr = new Date(updated.startTime).toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          })
+          const timeStr = new Date(updated.startTime).toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+          await notify({
+            userId: proj.clientId,
+            type: 'GENERAL',
+            title: `📅 Meeting Updated: ${updated.title}`,
+            message: `The meeting for project "${proj.name}" has been updated. New time: ${dateStr} at ${timeStr}.`,
+            link: '/calendar',
+          })
+        }
+      } catch (err) {
+        console.error('[event update notify client] failed:', err)
+      }
+    }
   }
 
   return NextResponse.json({ data: updated })

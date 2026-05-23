@@ -4,7 +4,6 @@ export const revalidate = 0
 
 import { getServerUser } from '@/lib/auth'
 import { sbSelect, sbCount, TASK_SELECT, CONTENT_SELECT, EVENT_SELECT } from '@/lib/supa'
-import { TopBar } from '@/components/layout/TopBar'
 import { Badge } from '@/components/ui/Badge'
 import {
   taskStatusColor, taskPriorityColor,
@@ -19,13 +18,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { ActiveTasksList } from './ActiveTasksList'
-
-
-function greet(name: string) {
-  const h = new Date().getHours()
-  const part = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
-  return `${part}, ${name.split(' ')[0]}`
-}
+import { OverviewTopBar } from './OverviewTopBar'
 
 async function getStats(userId: string, role: string) {
   const isAdmin = role === 'ADMIN'
@@ -340,7 +333,7 @@ export default async function OverviewPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <TopBar title={greet(user.name)} />
+      <OverviewTopBar name={user.name} />
 
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         {/* Scripting follow-up alerts (60% threshold reached) */}
@@ -631,3 +624,4 @@ export default async function OverviewPage() {
     </div>
   )
 }
+                                                                                                                                                                                                     

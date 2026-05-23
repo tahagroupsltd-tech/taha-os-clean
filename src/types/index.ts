@@ -97,6 +97,9 @@ export interface Content {
   status: ContentStatus
   description?: string | null
   driveLink?: string | null
+  scriptLink?: string | null
+  scriptApproved: boolean
+  scriptApprovedBy?: string | null
   caption?: string | null
   postDate?: string | null
   assigneeId?: string | null
