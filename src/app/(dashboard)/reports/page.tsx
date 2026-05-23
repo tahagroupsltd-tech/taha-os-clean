@@ -226,7 +226,7 @@ export default function ReportsPage() {
             <div className="bg-white rounded-lg border border-stone-100">
               <div className="px-4 py-3 border-b border-stone-100">
                 <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide">
-                  Today's Submissions ({teamStatus.filter((s) => s.submitted).length}/{teamStatus.length})
+                  Today&apos;s Submissions ({teamStatus.filter((s) => s.submitted).length}/{teamStatus.length})
                 </p>
               </div>
               <div className="divide-y divide-stone-50">

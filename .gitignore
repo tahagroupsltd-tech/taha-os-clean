@@ -1,13 +1,50 @@
+# Next.js build output
 .next/
+out/
+build/
+
+# Dependencies
 node_modules/
+
+# Environment variables — NEVER commit these
 .env
 .env.local
 .env.*.local
-out/
-build/
+.env.production.local
+.env.development.local
+
+# Only commit .env.example and .env.production (no secrets)
+# .env.production contains only NEXT_PUBLIC_APP_URL
+
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
-.DS_Store
 
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel
 .vercel
-.env*.local
+
+# Scratch / debug / one-off scripts — never in version control
+scratch/
+tmp/
+*.tmp
+debug-*.js
+test-*.js
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Coverage
+coverage/
+.nyc_output/

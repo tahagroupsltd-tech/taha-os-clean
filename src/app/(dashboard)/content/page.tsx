@@ -329,7 +329,9 @@ export default function ContentPage() {
     setLoading(false)
   }, [filterStatus, filterType, filterProject])
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    setMounted(true)
+  }, [])
   useEffect(() => { fetchContent() }, [fetchContent])
   useEffect(() => {
     if (user?.role === 'ADMIN' || user?.role === 'MANAGER') {
@@ -337,7 +339,7 @@ export default function ContentPage() {
       fetch('/api/projects').then(r => r.json()).then(j => setProjects(j.data ?? []))
     }
   }, [user])
-  // ── End hooks ────────────────────────────────────────────────────────────
+
 
   if (!mounted) {
     return (
@@ -712,4 +714,12 @@ function ContentCard({ item, canEdit, isAdmin, onEdit, onDelete, onStatusChange 
           </a>
         )}
         {item.driveLink && (
-          <a href={item.driveLin
+          <a href={item.driveLink} target="_blank" rel="noreferrer"
+            className="p-1.5 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100" title="Open Drive">
+            <ExternalLink size={12} />
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}

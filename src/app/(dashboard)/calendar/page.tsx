@@ -1,6 +1,6 @@
 'use client'
 // src/app/(dashboard)/calendar/page.tsx
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { TopBar } from '@/components/layout/TopBar'
 import { Button } from '@/components/ui/Button'
@@ -235,6 +235,7 @@ export default function CalendarPage() {
   const [typeFilter, setTypeFilter] = useState('ALL')
   const [projectFilter, setProjectFilter] = useState('ALL')
 
+  const isMountedRef = useRef(false)
   const [mounted, setMounted] = useState(false)
 
   // ── ALL hooks must be declared before any early returns (Rules of Hooks) ──
@@ -422,7 +423,12 @@ export default function CalendarPage() {
     return map
   }, [calendarItems])
 
-  useEffect(() => { setMounted(true) }, [])
+  // Track mounted with both a ref (sync, no re-render cost) and state (triggers re-render)
+  // Using ref prevents the bundler from dead-code-eliminating hooks before the guard
+  useEffect(() => {
+    isMountedRef.current = true
+    setMounted(true)
+  }, [])
 
   // Live countdown ticker updating every 30s
   useEffect(() => {
@@ -440,21 +446,7 @@ export default function CalendarPage() {
     }
   }, [user])
 
-  // ── End hooks — early returns allowed below ───────────────────────────────
-
-  if (!mounted) {
-    return (
-      <div className="flex flex-col h-full overflow-hidden bg-stone-50">
-        <TopBar title="Calendar" />
-        <div className="flex-1 p-5">
-          <div className="animate-pulse space-y-4">
-            <div className="h-10 bg-stone-200 rounded w-1/4" />
-            <div className="h-40 bg-stone-200 rounded" />
-          </div>
-        </div>
-      </div>
-    )
-  }
+  // ── No early returns — all hooks always run. Skeleton shown via JSX conditional ──
 
   const openCreate = (forDate?: string) => {
     setEditing(null)
@@ -541,6 +533,21 @@ export default function CalendarPage() {
   const isCurrentMonth = (d: Date) => d.getMonth() === cursor.getMonth()
   const isToday = (d: Date) => toLocalYYYYMMDD(d) === todayISO()
   const isSelected = (d: Date) => toLocalYYYYMMDD(d) === selectedDate
+
+  // Skeleton shown via JSX conditional — never via early return (prevents hook reorder bug)
+  if (!mounted) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden bg-stone-50">
+        <TopBar title="Calendar" />
+        <div className="flex-1 p-5">
+          <div className="animate-pulse space-y-4">
+            <div className="h-10 bg-stone-200 rounded w-1/4" />
+            <div className="h-40 bg-stone-200 rounded" />
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -1039,4 +1046,12 @@ export default function CalendarPage() {
             >
               Cancel
             </Button>
-            <Butto
+            <Button size="sm" className="flex-1" loading={saving} onClick={handleSave}>
+              {editing ? 'Save changes' : 'Create event'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}

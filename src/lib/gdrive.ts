@@ -4,8 +4,8 @@
 import 'server-only'
 import { google } from 'googleapis'
 
-const SUPABASE_URL = 'https://zmhmxfndzrrdmvvqblkx.supabase.co'
-const SUPABASE_ANON_KEY =
+const SUPABASE_URL = process.env.SUPABASE_URL ?? 'https://zmhmxfndzrrdmvvqblkx.supabase.co'
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ??
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptaG14Zm5kenJyZG12dnFibGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMDMzMzksImV4cCI6MjA5MjY3OTMzOX0.1i4olAULwrRO7wAP1Hpwur9Jl0SxieAn7dP5BaeyY9E'
 const REST = `${SUPABASE_URL}/rest/v1`
 

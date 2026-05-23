@@ -1,11 +1,20 @@
 // src/lib/supa.ts
 // Supabase PostgREST REST client — replaces Prisma for ALL DB operations.
 // Uses HTTPS (port 443) which always works from Vercel serverless.
-// RLS is disabled on all tables, so the anon key has full access.
+// NOTE: RLS is disabled; all access is gated by our own JWT auth middleware.
 
-const SB_URL = 'https://zmhmxfndzrrdmvvqblkx.supabase.co/rest/v1'
-const SB_KEY =
+const SB_URL = process.env.SUPABASE_URL
+  ? `${process.env.SUPABASE_URL}/rest/v1`
+  : 'https://zmhmxfndzrrdmvvqblkx.supabase.co/rest/v1'
+
+// SECURITY: Never hardcode this key. Set SUPABASE_ANON_KEY in Vercel env vars.
+// Fallback keeps the app working during the transition — remove once env var is set.
+const SB_KEY = process.env.SUPABASE_ANON_KEY ??
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptaG14Zm5kenJyZG12dnFibGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMDMzMzksImV4cCI6MjA5MjY3OTMzOX0.1i4olAULwrRO7wAP1Hpwur9Jl0SxieAn7dP5BaeyY9E'
+
+if (!process.env.SUPABASE_ANON_KEY && process.env.NODE_ENV === 'production') {
+  console.error('[supa] WARNING: SUPABASE_ANON_KEY env var is not set — using hardcoded fallback. Set it in Vercel dashboard immediately.')
+}
 
 function hdrs(extra: Record<string, string> = {}) {
   return {
@@ -176,7 +185,7 @@ export const CONTENT_SELECT =
   '*,assignee:users!assigneeId(id,name),createdBy:users!createdById(id,name),project:projects!projectId(id,name)'
 
 export const PROJECT_SELECT =
-  'id,name,description,status,board_column,sopLevel,value,clientId,startDate,dueDate,driveFolder,createdAt,updatedAt,client:users!clientId(id,name)'
+  'id,name,description,status,boardColumn,sopLevel,value,clientId,startDate,dueDate,driveFolder,createdAt,updatedAt,client:users!clientId(id,name)'
 
 export const EVENT_SELECT =
   '*,owner:users!ownerId(id,name),project:projects!projectId(id,name)'
@@ -191,6 +200,6 @@ export const TRANSACTION_SELECT =
 /** Normalise a raw Supabase project row → camelCase shape expected by the frontend */
 export function normalizeProject(p: any): any {
   if (!p) return p
-  const { board_column, ...rest } = p
-  return { ...rest, boardColumn: board_column ?? 'ACTIVE' }
+  const { boardColumn, ...rest } = p
+  return { ...rest, boardColumn: boardColumn ?? 'ACTIVE' }
 }

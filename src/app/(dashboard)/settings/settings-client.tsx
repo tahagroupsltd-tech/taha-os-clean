@@ -248,12 +248,12 @@ export function SettingsClient({ currentUserId, canResetOthers, users, gcalConne
           <div className="flex items-center gap-2 mb-4">
             <Shield size={14} className="text-stone-500" />
             <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wide">
-              Reset Another User's Password
+              Reset Another User&apos;s Password
             </h2>
           </div>
           <div className="rounded-md bg-amber-50 border border-amber-100 px-3 py-2.5 mb-3 max-w-md">
             <p className="text-[11px] text-amber-700 leading-relaxed">
-              Use this to reset a teammate or client's password. After resetting, copy the password and share it via a <strong>private message, Signal, or WhatsApp</strong> — never over email or Slack.
+              Use this to reset a teammate or client&apos;s password. After resetting, copy the password and share it via a <strong>private message, Signal, or WhatsApp</strong> — never over email or Slack.
             </p>
           </div>
           <div className="space-y-3 max-w-md">
@@ -321,7 +321,7 @@ export function SettingsClient({ currentUserId, canResetOthers, users, gcalConne
 
         <p className="text-[11px] text-stone-400 mb-4 leading-relaxed max-w-lg">
           Connect your Google account so tasks and content deadlines are automatically added to your
-          Google Calendar — with a popup alarm before they're due.
+          Google Calendar — with a popup alarm before they&apos;re due.
         </p>
 
         {!connected ? (
@@ -331,7 +331,7 @@ export function SettingsClient({ currentUserId, canResetOthers, users, gcalConne
               <p className="text-[11px] text-blue-700 leading-relaxed">
                 <span className="font-semibold">What gets synced:</span><br />
                 • Your assigned tasks → deadline reminder event<br />
-                • Content you're editing → post-date reminder event<br />
+                • Content you&apos;re editing → post-date reminder event<br />
                 • Content you schedule (manager) → posting day event
               </p>
             </div>
@@ -435,7 +435,7 @@ export function SettingsClient({ currentUserId, canResetOthers, users, gcalConne
             </div>
 
             <p className="text-[10px] text-stone-400 leading-relaxed">
-              "Sync all pending now" re-pushes all your upcoming tasks and content deadlines.
+              &quot;Sync all pending now&quot; re-pushes all your upcoming tasks and content deadlines.
               Safe to run multiple times — existing events are updated, not duplicated.
             </p>
           </div>

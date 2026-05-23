@@ -348,7 +348,7 @@ export default async function OverviewPage() {
                       💡 Start Scripting (L4 SOP) for {alert.name}
                     </p>
                     <p className="text-[11px] text-stone-600 mt-0.5">
-                      Campaign is at <strong>{alert.pct}%</strong> completion ({alert.posted}/{alert.total} videos posted). Scripting team should start SOP Level 4 script approval for the next month's batch.
+                      Campaign is at <strong>{alert.pct}%</strong> completion ({alert.posted}/{alert.total} videos posted). Scripting team should start SOP Level 4 script approval for the next month&apos;s batch.
                     </p>
                   </div>
                 </div>
@@ -624,4 +624,3 @@ export default async function OverviewPage() {
     </div>
   )
 }
-                                                                                                                                                                                                     

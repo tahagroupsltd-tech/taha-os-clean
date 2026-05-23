@@ -660,7 +660,7 @@ export default function ProjectsPage() {
                       <th className="px-4 py-3 border-r border-stone-200 min-w-[120px]">Shoot Logistics</th>
                       <th className="px-4 py-3 border-r border-stone-200 min-w-[180px]">Next Video Post</th>
                       <th className="px-4 py-3 border-r border-stone-200 min-w-[180px]">Last Posted Video</th>
-                      <th className="px-4 py-3 border-r border-stone-200 min-w-[180px]">Month's Last Video</th>
+                      <th className="px-4 py-3 border-r border-stone-200 min-w-[180px]">Month&apos;s Last Video</th>
                       <th className="px-4 py-3 border-r border-stone-200 w-[150px]">Scripts Status</th>
                       {isFounder && (
                         <>
@@ -1159,4 +1159,3 @@ function ProjectCard({
     </div>
   )
 }
-                              

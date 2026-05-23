@@ -521,7 +521,7 @@ function SOPPageContent() {
             <div className="flex items-center gap-2 flex-shrink-0">
               <div className="text-right hidden lg:block">
                 <p className="text-xs font-bold text-green-700">🎯 Threshold Reached (60%+)</p>
-                <p className="text-[10px] text-stone-400">Ready to start next cycle's scripting</p>
+                <p className="text-[10px] text-stone-400">Ready to start next cycle&apos;s scripting</p>
               </div>
               <button
                 onClick={handleTriggerL4Scripting}

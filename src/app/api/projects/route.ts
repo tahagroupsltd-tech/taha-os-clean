@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     name,
     description: description || null,
     status: status ?? 'ACTIVE',
-    board_column: boardColumn ?? 'ACTIVE',
+    boardColumn: boardColumn ?? 'ACTIVE',
     sopLevel: body.sopLevel ?? null,
     value: body.value ?? null,
     clientId: clientId || null,

@@ -73,7 +73,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.name !== undefined) patch.name = body.name
   if (body.description !== undefined) patch.description = body.description || null
   if (body.status !== undefined) patch.status = body.status
-  if (body.boardColumn !== undefined) patch.board_column = body.boardColumn
+  if (body.boardColumn !== undefined) patch.boardColumn = body.boardColumn
   if (body.sopLevel !== undefined) patch.sopLevel = body.sopLevel
   if (body.value !== undefined) patch.value = body.value ?? null
   if (body.clientId !== undefined) patch.clientId = body.clientId || null

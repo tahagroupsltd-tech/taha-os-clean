@@ -38,9 +38,15 @@ async function main() {
     console.log('Navigating to login page...');
     await page.goto('http://localhost:3000/login', { waitUntil: 'networkidle0' });
     
+    console.log('Waiting 3 seconds for hydration...');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
     console.log('Logging in as admin...');
     await page.type('#username-or-phone', 'admin');
     await page.type('#password', 'admin123');
+    
+    console.log('Waiting 1 second before clicking...');
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Click submit and wait for navigation
     await Promise.all([
@@ -50,24 +56,14 @@ async function main() {
 
     console.log('Current URL after login:', page.url());
     
+    console.log('Navigating to calendar page...');
+    await page.goto('http://localhost:3000/calendar', { waitUntil: 'networkidle0' });
+    console.log('Current URL after navigation:', page.url());
+    
     // Wait a bit to capture any hydrated client-side errors
-    console.log('Waiting 5 seconds for initial page hydration...');
+    console.log('Waiting 5 seconds for calendar page hydration...');
     await new Promise(resolve => setTimeout(resolve, 5000));
     
-    console.log('Opening Active Clients sidebar...');
-    await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button'));
-      const activeClientsBtn = buttons.find(b => b.textContent && b.textContent.includes('Active Clients'));
-      if (activeClientsBtn) {
-        activeClientsBtn.click();
-      } else {
-        throw new Error('Active Clients button not found');
-      }
-    });
-    
-    console.log('Waiting 5 seconds for sidebar to fetch data and render...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
     const screenshotPath = 'C:\\Users\\SEC\\.gemini\/\/antigravity\\brain\\34e4085f-6c24-4a92-920b-3dd83bdadc7c\\overview_crash_screenshot.png';
     console.log('Taking screenshot...');
     await page.screenshot({ path: screenshotPath });

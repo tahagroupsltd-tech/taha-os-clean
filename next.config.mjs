@@ -30,6 +30,24 @@ const nextConfig = {
           },
           // Basic XSS protection for older browsers
           { key: 'X-XSS-Protection', value: '1; mode=block' },
+          // HSTS — force HTTPS for 1 year in production
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=31536000; includeSubDomains',
+          },
+          // Content-Security-Policy — blocks XSS and data injection attacks
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https:",
+              "font-src 'self' data:",
+              "connect-src 'self' https://*.supabase.co https://api.openai.com",
+              "frame-ancestors 'none'",
+            ].join('; '),
+          },
         ],
       },
       // Disable caching on all API routes

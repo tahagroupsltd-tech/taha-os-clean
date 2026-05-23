@@ -60,4 +60,9 @@ export function getSessionCookieOptions() {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax' as const,
-    maxAge: COOK
+    maxAge: COOKIE_MAX_AGE,
+    path: '/',
+  }
+}
+
+export { COOKIE_NAME }

@@ -53,4 +53,14 @@ export default function GlobalError({
             Try again
           </button>
           <a
-            href=
+            href="/overview"
+            className="inline-flex items-center gap-2 bg-white border border-stone-200 text-stone-700
+                       text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-stone-50 transition-colors"
+          >
+            Go home
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}

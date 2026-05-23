@@ -353,7 +353,7 @@ export function ActiveClientsSidebar() {
                     <div className="flex items-center justify-between">
                       <span className="text-stone-400 flex items-center gap-1.5">
                         <Video size={11} className="text-stone-400 shrink-0 animate-pulse" />
-                        Month's Last Video:
+                        Month&apos;s Last Video:
                       </span>
                       <span className="text-stone-700 font-medium truncate max-w-[150px]">
                         {item.lastVideoCurrentMonth 
@@ -448,4 +448,25 @@ export function ActiveClientsSidebar() {
                     </button>
                     <button
                       onClick={() => handleNavigate(`/content?projectId=${item.projectId}`)}
-                      className="p-1.5 border border-stone-200 hover:border-stone-300 hover
+                      className="p-1.5 border border-stone-200 hover:border-stone-300 hover:bg-stone-50 rounded-lg text-stone-500 transition-colors"
+                      title="Content Planner"
+                    >
+                      <FileVideo size={11} />
+                    </button>
+                    <button
+                      onClick={() => handleNavigate(`/tasks?projectId=${item.projectId}`)}
+                      className="p-1.5 border border-stone-200 hover:border-stone-300 hover:bg-stone-50 rounded-lg text-stone-500 transition-colors"
+                      title="Tasks Board"
+                    >
+                      <CheckSquare size={11} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </aside>
+    </>
+  )
+}

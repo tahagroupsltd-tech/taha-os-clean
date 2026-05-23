@@ -285,4 +285,21 @@ export function getTaskUrgencyColors(deadline: string | null | undefined, status
   // < 3 days
   if (diff < 3 * 24 * 60 * 60 * 1000) {
     return {
-      ca
+      cardClasses: 'bg-amber-50/20 border-amber-200/80 text-stone-900',
+      badgeClasses: 'bg-amber-50 text-amber-700 border-amber-200',
+      textClasses: 'text-amber-700 font-semibold',
+      timeLeftStr: `${formatDuration(diff)} left`,
+      isOverdue: false,
+    }
+  }
+
+  // Safe (> 3 days)
+  return {
+    cardClasses: 'bg-green-50/10 border-green-100 text-stone-900',
+    badgeClasses: 'bg-green-50/50 text-green-700 border-green-100',
+    textClasses: 'text-green-600',
+    timeLeftStr: `${formatDuration(diff)} left`,
+    isOverdue: false,
+  }
+}
+
