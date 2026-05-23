@@ -39,10 +39,10 @@ export default async function BillingPage({
   const startOfNextMonth = new Date(year, month + 1, 1)
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
 
-  // All active/paused projects with client info
+  // All active/paused/completed projects with client info
   const projectsRaw = await sbSelect('projects', {
     select: '*,client:users!clientId(id,name,username)',
-    filters: { status: 'in.(ACTIVE,PAUSED)' },
+    filters: { status: 'in.(ACTIVE,PAUSED,COMPLETED)' },
     order: 'createdAt.desc',
   }).catch(() => [] as any[])
 
@@ -111,6 +111,7 @@ export default async function BillingPage({
     return {
       id: p.id,
       project: p.name,
+      projectStatus: p.status,
       client: p.client ?? null,
       status,
       value: valNum,
@@ -270,7 +271,14 @@ export default async function BillingPage({
                   <tbody className="divide-y divide-stone-50">
                     {projectRows.map((r) => (
                       <tr key={r.id}>
-                        <td className="px-5 py-3 font-medium text-stone-900 whitespace-nowrap">{r.project}</td>
+                        <td className="px-5 py-3 font-medium text-stone-900 whitespace-nowrap">
+                          <div>{r.project}</div>
+                          {r.projectStatus === 'COMPLETED' && (
+                            <span className="inline-block mt-0.5 text-[9px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-150 uppercase tracking-wide">
+                              Completed
+                            </span>
+                          )}
+                        </td>
                         <td className="px-5 py-3 text-right whitespace-nowrap">
                           <ProjectValueInput projectId={r.id} initialValue={r.value} />
                         </td>
@@ -335,7 +343,14 @@ export default async function BillingPage({
                 <tbody className="divide-y divide-stone-50">
                   {noClient.map((r) => (
                     <tr key={r.id}>
-                      <td className="px-5 py-3 font-medium text-stone-900 whitespace-nowrap">{r.project}</td>
+                      <td className="px-5 py-3 font-medium text-stone-900 whitespace-nowrap">
+                        <div>{r.project}</div>
+                        {r.projectStatus === 'COMPLETED' && (
+                          <span className="inline-block mt-0.5 text-[9px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-155 uppercase tracking-wide">
+                            Completed
+                          </span>
+                        )}
+                      </td>
                       <td className="px-5 py-3 text-right whitespace-nowrap">
                         <ProjectValueInput projectId={r.id} initialValue={r.value} />
                       </td>
