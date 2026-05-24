@@ -8,7 +8,7 @@ import {
 } from '@/lib/utils'
 import type { Task, TaskStatus } from '@/types'
 
-export function ActiveTasksList({ recentTasks }: { recentTasks: Task[] }) {
+export function ActiveTasksList({ recentTasks, isClient = false }: { recentTasks: Task[]; isClient?: boolean }) {
   const [now, setNow] = useState<Date>(() => new Date())
   const [mounted, setMounted] = useState(false)
 
@@ -47,7 +47,7 @@ export function ActiveTasksList({ recentTasks }: { recentTasks: Task[] }) {
               </div>
             </div>
             <div className="text-right flex-shrink-0">
-              {task.assignedTo && (
+              {task.assignedTo && !isClient && (
                 <p className="text-[10px] text-stone-400">{task.assignedTo.name}</p>
               )}
               {task.deadline ? (

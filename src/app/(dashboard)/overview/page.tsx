@@ -41,11 +41,32 @@ async function getStats(userId: string, role: string) {
     try { return await fn() } catch (e) { console.error('[overview] query failed:', e); return fallback }
   }
 
+  // For CLIENT: get their project IDs first so we can filter tasks properly
+  let clientProjectIds: string[] = []
+  if (role === 'CLIENT') {
+    try {
+      const clientProjs = await sbSelect('projects', { select: 'id', filters: { clientId: `eq.${userId}` } })
+      clientProjectIds = clientProjs.map((p: any) => p.id)
+    } catch { /* ignore */ }
+  }
+
+  // Build task filter: clients see tasks on THEIR projects only; employees see only their own tasks
   const taskFilters: Record<string, string> = {}
   if (isEmployee) taskFilters.assignedToId = `eq.${userId}`
+  if (role === 'CLIENT') {
+    if (clientProjectIds.length > 0) {
+      taskFilters.projectId = `in.(${clientProjectIds.join(',')})`
+    } else {
+      // No projects → return no tasks
+      taskFilters.projectId = 'eq.none'
+    }
+  }
 
   const contentFilters: Record<string, string> = {}
   if (isEmployee) contentFilters.assigneeId = `eq.${userId}`
+  if (role === 'CLIENT' && clientProjectIds.length > 0) {
+    contentFilters.projectId = `in.(${clientProjectIds.join(',')})`
+  }
 
   const projectFilters: Record<string, string> = {}
   if (role === 'CLIENT') projectFilters.clientId = `eq.${userId}`
@@ -478,7 +499,7 @@ export default async function OverviewPage() {
                 View all →
               </Link>
             </div>
-            <ActiveTasksList recentTasks={stats.recentTasks} />
+            <ActiveTasksList recentTasks={stats.recentTasks} isClient={isClient} />
           </div>
 
           {/* Upcoming Events */}
@@ -551,7 +572,7 @@ export default async function OverviewPage() {
                       )}
                     </div>
                   </div>
-                  {item.assignee && (
+                  {item.assignee && !isClient && (
                     <p className="text-[10px] text-stone-400 flex-shrink-0">{item.assignee.name}</p>
                   )}
                 </div>
