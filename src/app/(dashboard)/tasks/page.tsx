@@ -141,11 +141,13 @@ export default function TasksPage() {
 
   const canEdit = user?.role !== 'CLIENT'
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER'
+  const isClient = user?.role === 'CLIENT'
 
-  const displayedTasks = tasks.filter(t => {
-    if (isAdmin && t.status === 'DONE') return false
-    return true
-  })
+  // Admin/Manager: hide DONE by default (filter dropdown handles it)
+  // Client & staff: show all their tasks
+  const displayedTasks = isAdmin
+    ? (filterStatus ? tasks : tasks.filter(t => t.status !== 'DONE'))
+    : tasks
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -190,6 +192,7 @@ export default function TasksPage() {
             onDelete={handleDelete}
             onStatusChange={handleStatusChange}
             isAdmin={isAdmin}
+            isClient={isClient}
             userId={user?.id ?? ''}
             now={now}
           />
@@ -200,6 +203,7 @@ export default function TasksPage() {
             onEdit={openEdit}
             onDelete={handleDelete}
             isAdmin={isAdmin}
+            isClient={isClient}
             userId={user?.id ?? ''}
             now={now}
           />
@@ -241,13 +245,14 @@ export default function TasksPage() {
 }
 
 // ── Board View ────────────────────────────────────────────
-function BoardView({ tasks, canEdit, onEdit, onDelete, onStatusChange, isAdmin, userId, now }: {
+function BoardView({ tasks, canEdit, onEdit, onDelete, onStatusChange, isAdmin, isClient = false, userId, now }: {
   tasks: Task[]
   canEdit: boolean
   onEdit: (t: Task) => void
   onDelete: (id: string) => void
   onStatusChange: (id: string, s: TaskStatus) => void
   isAdmin: boolean
+  isClient?: boolean
   userId: string
   now: Date
 }) {
@@ -272,7 +277,7 @@ function BoardView({ tasks, canEdit, onEdit, onDelete, onStatusChange, isAdmin, 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
               {unassigned.map(task => (
                 <TaskCard key={task.id} task={task} canEdit={canEdit} onEdit={onEdit} onDelete={onDelete}
-                  onStatusChange={onStatusChange} isAdmin={isAdmin} userId={userId} showStatusSelect now={now} />
+                  onStatusChange={onStatusChange} isAdmin={isAdmin} isClient={isClient} userId={userId} showStatusSelect now={now} />
               ))}
             </div>
           </div>
@@ -293,7 +298,7 @@ function BoardView({ tasks, canEdit, onEdit, onDelete, onStatusChange, isAdmin, 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                 {group.tasks.map(task => (
                   <TaskCard key={task.id} task={task} canEdit={canEdit} onEdit={onEdit} onDelete={onDelete}
-                    onStatusChange={onStatusChange} isAdmin={isAdmin} userId={userId} showStatusSelect now={now} />
+                    onStatusChange={onStatusChange} isAdmin={isAdmin} isClient={isClient} userId={userId} showStatusSelect now={now} />
                 ))}
               </div>
             </div>
@@ -323,7 +328,7 @@ function BoardView({ tasks, canEdit, onEdit, onDelete, onStatusChange, isAdmin, 
               <div className="flex-1 overflow-y-auto space-y-2">
                 {colTasks.map((task) => (
                   <TaskCard key={task.id} task={task} canEdit={canEdit} onEdit={onEdit} onDelete={onDelete}
-                    onStatusChange={onStatusChange} isAdmin={isAdmin} userId={userId} showStatusSelect now={now} />
+                    onStatusChange={onStatusChange} isAdmin={isAdmin} isClient={isClient} userId={userId} showStatusSelect now={now} />
                 ))}
                 {colTasks.length === 0 && (
                   <div className="rounded-md border border-dashed border-stone-200 p-4 text-center">
@@ -340,12 +345,13 @@ function BoardView({ tasks, canEdit, onEdit, onDelete, onStatusChange, isAdmin, 
 }
 
 // ── List View ─────────────────────────────────────────────
-function ListView({ tasks, canEdit, onEdit, onDelete, isAdmin, userId, now }: {
+function ListView({ tasks, canEdit, onEdit, onDelete, isAdmin, isClient = false, userId, now }: {
   tasks: Task[]
   canEdit: boolean
   onEdit: (t: Task) => void
   onDelete: (id: string) => void
   isAdmin: boolean
+  isClient?: boolean
   userId: string
   now: Date
 }) {
@@ -388,14 +394,14 @@ function ListView({ tasks, canEdit, onEdit, onDelete, isAdmin, userId, now }: {
                     <Badge className={taskPriorityColor(task.priority)}>{task.priority}</Badge>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {task.assignedTo ? (
+                    {!isClient && task.assignedTo ? (
                       <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
                           <span className="text-[10px] font-bold text-indigo-700">{task.assignedTo.name[0].toUpperCase()}</span>
                         </div>
                         <span className="text-stone-700 font-medium">{task.assignedTo.name}</span>
                       </div>
-                    ) : (
+                    ) : !isClient && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-500 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
                         ⚠ Unassigned
                       </span>
@@ -433,13 +439,14 @@ function ListView({ tasks, canEdit, onEdit, onDelete, isAdmin, userId, now }: {
 }
 
 // ── Task Card ─────────────────────────────────────────────
-function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, userId, showStatusSelect, now }: {
+function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, isClient = false, userId, showStatusSelect, now }: {
   task: Task
   canEdit: boolean
   onEdit: (t: Task) => void
   onDelete: (id: string) => void
   onStatusChange: (id: string, s: TaskStatus) => void
   isAdmin: boolean
+  isClient?: boolean
   userId: string
   showStatusSelect?: boolean
   now: Date
@@ -480,7 +487,7 @@ function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, us
             {task.deadline ? <>{formatDate(task.deadline)}{colors.timeLeftStr && ` · ${colors.timeLeftStr}`}</> : 'No deadline'}
           </span>
         </div>
-        {task.assignedTo ? (
+        {!isClient && (task.assignedTo ? (
           <div className="flex items-center gap-1.5">
             <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
               <span className="text-[9px] font-bold text-indigo-700">{task.assignedTo.name[0].toUpperCase()}</span>
@@ -491,7 +498,7 @@ function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, us
           <span className="inline-flex items-center gap-1 text-[9px] font-bold text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-full">
             ⚠ Unassigned
           </span>
-        )}
+        ))}
       </div>
 
       {showStatusSelect && canEdit && (

@@ -15,20 +15,20 @@ import { useState, useEffect } from 'react'
 import { TAHA_LOGO } from '@/lib/logo'
 
 const NAV_ITEMS = [
-  { href: '/overview',  label: 'Overview',      icon: LayoutDashboard, roles: ['ADMIN','MANAGER','EMPLOYEE','CLIENT'], color: 'text-violet-400' },
-  { href: '/tasks',     label: 'Tasks',          icon: CheckSquare,     roles: ['ADMIN','MANAGER','EMPLOYEE'],          color: 'text-blue-400'   },
-  { href: '/calendar',  label: 'Calendar',       icon: Calendar,        roles: ['ADMIN','MANAGER','EMPLOYEE','CLIENT'], color: 'text-cyan-400'   },
-  { href: '/content',   label: 'Content',        icon: FileVideo,       roles: ['ADMIN','MANAGER','EMPLOYEE'],          color: 'text-pink-400'   },
+  { href: '/overview',  label: 'Overview',      icon: LayoutDashboard, roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-violet-400' },
+  { href: '/tasks',     label: 'Tasks',          icon: CheckSquare,     roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR'],          color: 'text-blue-400'   },
+  { href: '/calendar',  label: 'Calendar',       icon: Calendar,        roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-cyan-400'   },
+  { href: '/content',   label: 'Content',        icon: FileVideo,       roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-pink-400'   },
   { href: '/schedule',  label: 'Bulk Schedule',  icon: CalendarRange,   roles: ['ADMIN','MANAGER'],                     color: 'text-orange-400' },
-  { href: '/notes',     label: 'Notes',          icon: StickyNote,      roles: ['ADMIN','MANAGER','EMPLOYEE'],          color: 'text-yellow-400' },
+  { href: '/notes',     label: 'Notes',          icon: StickyNote,      roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR'],          color: 'text-yellow-400' },
   { href: '/finance',   label: 'Finance',        icon: Wallet,          roles: ['ADMIN'],                               color: 'text-green-400'  },
   { href: '/billing',   label: 'Client Billing', icon: IndianRupee,     roles: ['ADMIN'],                               color: 'text-emerald-400'},
-  { href: '/projects',  label: 'Projects',       icon: FolderKanban,    roles: ['ADMIN','MANAGER','EMPLOYEE','CLIENT'], color: 'text-indigo-400' },
-  { href: '/reports',   label: 'Daily Reports',  icon: ClipboardList,   roles: ['ADMIN','MANAGER','EMPLOYEE'],          color: 'text-sky-400'    },
+  { href: '/projects',  label: 'Projects',       icon: FolderKanban,    roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-indigo-400' },
+  { href: '/reports',   label: 'Daily Reports',  icon: ClipboardList,   roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR'],          color: 'text-sky-400'    },
   { href: '/team',      label: 'Team',           icon: Users,           roles: ['ADMIN','MANAGER'],                     color: 'text-teal-400'   },
-  { href: '/sop',       label: 'SOP Pipeline',   icon: BookMarked,      roles: ['ADMIN','MANAGER','EMPLOYEE'],          color: 'text-amber-400'  },
+  { href: '/sop',       label: 'SOP Pipeline',   icon: BookMarked,      roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR'],          color: 'text-amber-400'  },
   { href: '/ai-tools',  label: 'AI Tools',       icon: Sparkles,        roles: ['ADMIN','MANAGER'],                     color: 'text-purple-400' },
-  { href: '/settings',  label: 'Settings',       icon: Settings,        roles: ['ADMIN','MANAGER','EMPLOYEE','CLIENT'], color: 'text-slate-400'  },
+  { href: '/settings',  label: 'Settings',       icon: Settings,        roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-slate-400'  },
 ]
 
 const CRM_ITEMS = [
@@ -60,11 +60,9 @@ export function Sidebar() {
     setMounted(true)
   }, [])
 
-  const effectiveRole = user && ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
-    ? 'EMPLOYEE'
-    : user?.role
+  const effectiveRole = user?.role ?? ''
 
-  const visibleItems = NAV_ITEMS.filter(item => user && effectiveRole && item.roles.includes(effectiveRole))
+  const visibleItems = NAV_ITEMS.filter(item => user && item.roles.includes(effectiveRole))
   const showCrm = user && ['ADMIN','MANAGER'].includes(user.role)
   const crmActive = pathname.startsWith('/crm')
 

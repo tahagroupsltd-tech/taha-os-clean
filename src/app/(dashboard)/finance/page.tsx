@@ -58,7 +58,7 @@ export default function FinancePage() {
   } | null>(null)
   const [lastSynced, setLastSynced] = useState<Date | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [activeTab, setActiveTab] = useState<'transactions' | 'invoices' | 'loans' | 'analytics'>('transactions')
+  const [activeTab, setActiveTab] = useState<'transactions' | 'invoices' | 'loans' | 'receivables' | 'analytics'>('transactions')
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState<string>('')
@@ -70,6 +70,8 @@ export default function FinancePage() {
   const [loanModalOpen, setLoanModalOpen] = useState(false)
   const [editingLoan, setEditingLoan] = useState<LoanRow | null>(null)
   const [pendingLoans, setPendingLoans] = useState(0)
+  const [receivableModalOpen, setReceivableModalOpen] = useState(false)
+  const [editingReceivable, setEditingReceivable] = useState<ReceivableRow | null>(null)
 
 
 
@@ -248,7 +250,7 @@ export default function FinancePage() {
 
       {/* Tab bar */}
       <div className="flex border-b border-stone-100 bg-white px-5 gap-4 flex-shrink-0">
-        {(['transactions', 'invoices', 'loans', 'analytics'] as const).map(t => (
+        {(['transactions', 'invoices', 'loans', 'receivables', 'analytics'] as const).map(t => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -258,7 +260,7 @@ export default function FinancePage() {
                 : 'border-transparent text-stone-400 hover:text-stone-700'
             }`}
           >
-            {t === 'analytics' ? '📊 Analytics' : t}
+            {t === 'analytics' ? '📊 Analytics' : t === 'receivables' ? '💰 To Get' : t}
           </button>
         ))}
       </div>
@@ -483,6 +485,14 @@ export default function FinancePage() {
             editing={editingLoan}
             setEditing={setEditingLoan}
             onRefresh={fetchPendingLoans}
+          />
+        )}
+        {activeTab === 'receivables' && (
+          <ReceivablesTab
+            modalOpen={receivableModalOpen}
+            setModalOpen={setReceivableModalOpen}
+            editing={editingReceivable}
+            setEditing={setEditingReceivable}
           />
         )}
         {activeTab === 'analytics' && (
@@ -1256,4 +1266,420 @@ function LoansTab({
   )
 }
 
+// ─── Receivables ("To Get") Tab ───────────────────────────────────────────────
 
+interface ReceivableRow {
+  id: string
+  client_name: string
+  description: string
+  amount: number
+  status: 'PENDING' | 'RECEIVED'
+  due_date: string | null
+  notes: string | null
+  client_id: string | null
+  project_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface ReceivableForm {
+  client_name: string
+  client_id: string
+  project_id: string
+  description: string
+  amount: string
+  status: 'PENDING' | 'RECEIVED'
+  dueDate: string
+  notes: string
+}
+
+const EMPTY_RECEIVABLE: ReceivableForm = {
+  client_name: '',
+  client_id: '',
+  project_id: '',
+  description: '',
+  amount: '',
+  status: 'PENDING',
+  dueDate: '',
+  notes: '',
+}
+
+interface ClientOption {
+  clientId: string
+  clientName: string
+  projects: { id: string; name: string }[]
+}
+
+function ReceivablesTab({
+  modalOpen,
+  setModalOpen,
+  editing,
+  setEditing,
+}: {
+  modalOpen: boolean
+  setModalOpen: (open: boolean) => void
+  editing: ReceivableRow | null
+  setEditing: (r: ReceivableRow | null) => void
+}) {
+  const [items, setItems] = useState<ReceivableRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [summary, setSummary] = useState({ pendingTotal: 0, receivedTotal: 0, total: 0 })
+  const [form, setForm] = useState<ReceivableForm>(EMPTY_RECEIVABLE)
+  const [clientOptions, setClientOptions] = useState<ClientOption[]>([])
+
+  // Build a flat list of projects for the currently selected client
+  const selectedClientProjects = clientOptions.find(c => c.clientId === form.client_id)?.projects ?? []
+
+  const fetchItems = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/receivables')
+      const json = await res.json()
+      if (res.ok) {
+        setItems(json.data ?? [])
+        if (json.summary) setSummary(json.summary)
+      }
+    } catch (err) {
+      console.error('Error fetching receivables:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Fetch active clients + their projects once
+  const fetchClients = useCallback(async () => {
+    try {
+      const res = await fetch('/api/clients/active')
+      const json = await res.json()
+      if (res.ok && json.data) {
+        // Group projects by client
+        const map = new Map<string, ClientOption>()
+        for (const row of json.data as any[]) {
+          if (!map.has(row.clientId)) {
+            map.set(row.clientId, { clientId: row.clientId, clientName: row.clientName, projects: [] })
+          }
+          map.get(row.clientId)!.projects.push({ id: row.projectId, name: row.projectName })
+        }
+        setClientOptions(Array.from(map.values()))
+      }
+    } catch (err) {
+      console.error('Error fetching clients:', err)
+    }
+  }, [])
+
+  useEffect(() => { fetchItems(); fetchClients() }, [fetchItems, fetchClients])
+
+  useEffect(() => {
+    if (editing) {
+      setForm({
+        client_name: editing.client_name,
+        client_id: editing.client_id ?? '',
+        project_id: editing.project_id ?? '',
+        description: editing.description,
+        amount: String(editing.amount),
+        status: editing.status,
+        dueDate: editing.due_date ? editing.due_date.split('T')[0] : '',
+        notes: editing.notes ?? '',
+      })
+    } else {
+      setForm(EMPTY_RECEIVABLE)
+    }
+  }, [editing])
+
+  const handleClientChange = (clientId: string) => {
+    const found = clientOptions.find(c => c.clientId === clientId)
+    setForm(f => ({
+      ...f,
+      client_id: clientId,
+      client_name: found?.clientName ?? '',
+      project_id: '', // reset project when client changes
+    }))
+  }
+
+  const handleSave = async () => {
+    const nameToUse = form.client_name.trim()
+    if (!nameToUse || !form.description.trim() || !form.amount) {
+      toast.error('Client, description and amount are required')
+      return
+    }
+    setSaving(true)
+    try {
+      const payload = {
+        client_name: nameToUse,
+        client_id: form.client_id || null,
+        project_id: form.project_id || null,
+        description: form.description.trim(),
+        amount: parseFloat(form.amount),
+        status: form.status,
+        due_date: form.dueDate || null,
+        notes: form.notes.trim() || null,
+      }
+      const url = editing ? `/api/receivables/${editing.id}` : '/api/receivables'
+      const method = editing ? 'PATCH' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (!res.ok) { const j = await res.json(); throw new Error(j.error) }
+      toast.success(editing ? 'Updated' : 'Added to receivables')
+      setModalOpen(false)
+      setEditing(null)
+      fetchItems()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this receivable?')) return
+    try {
+      const res = await fetch(`/api/receivables/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed')
+      toast.success('Deleted')
+      fetchItems()
+    } catch {
+      toast.error('Failed to delete')
+    }
+  }
+
+  const handleMarkReceived = async (item: ReceivableRow) => {
+    try {
+      const res = await fetch(`/api/receivables/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'RECEIVED' }),
+      })
+      if (!res.ok) throw new Error('Failed')
+      toast.success(`Marked as received — ${formatMoney(item.amount)}`)
+      fetchItems()
+    } catch {
+      toast.error('Failed to update')
+    }
+  }
+
+  const pending = items.filter(i => i.status === 'PENDING')
+  const received = items.filter(i => i.status === 'RECEIVED')
+
+  return (
+    <div className="space-y-5">
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 p-4 shadow-sm">
+          <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider mb-1">Pending — To Collect</p>
+          <p className="text-2xl font-bold text-amber-800">{formatMoney(summary.pendingTotal)}</p>
+          <p className="text-[10px] text-amber-600 mt-1">{pending.length} outstanding</p>
+        </div>
+        <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 p-4 shadow-sm">
+          <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wider mb-1">Received</p>
+          <p className="text-2xl font-bold text-green-800">{formatMoney(summary.receivedTotal)}</p>
+          <p className="text-[10px] text-green-600 mt-1">{received.length} collected</p>
+        </div>
+        <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1">Total Tracked</p>
+            <p className="text-2xl font-bold text-stone-900">{formatMoney(summary.total)}</p>
+          </div>
+          <button
+            onClick={() => { setEditing(null); setModalOpen(true) }}
+            className="flex items-center gap-1.5 rounded-lg bg-stone-900 px-3 py-2 text-xs font-semibold text-white hover:bg-stone-700 transition-colors"
+          >
+            <Plus size={13} /> Add
+          </button>
+        </div>
+      </div>
+
+      {/* Pending list */}
+      {loading ? (
+        <div className="text-center py-10 text-stone-400 text-sm">Loading…</div>
+      ) : pending.length === 0 && received.length === 0 ? (
+        <div className="text-center py-16 text-stone-400">
+          <p className="text-4xl mb-3">💰</p>
+          <p className="font-semibold text-stone-600">No receivables yet</p>
+          <p className="text-sm mt-1">Track money clients owe you</p>
+          <button
+            onClick={() => { setEditing(null); setModalOpen(true) }}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-xs font-semibold text-white hover:bg-stone-700"
+          >
+            <Plus size={13} /> Add first entry
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {pending.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">Outstanding</h3>
+              <div className="space-y-2">
+                {pending.map(item => (
+                  <div key={item.id} className="flex items-center justify-between rounded-xl border border-amber-100 bg-white p-3.5 shadow-sm gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-stone-900 truncate">{item.client_name}</span>
+                        <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">Pending</span>
+                      </div>
+                      <p className="text-xs text-stone-500 truncate mt-0.5">{item.description}</p>
+                      {item.due_date && (
+                        <p className="text-[10px] text-stone-400 mt-0.5">Due {formatDate(item.due_date)}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-base font-bold text-amber-700">{formatMoney(item.amount)}</span>
+                      <button
+                        onClick={() => handleMarkReceived(item)}
+                        title="Mark as received"
+                        className="p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+                      >
+                        <CheckCircle2 size={15} />
+                      </button>
+                      <button onClick={() => { setEditing(item); setModalOpen(true) }} className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400">
+                        <Pencil size={13} />
+                      </button>
+                      <button onClick={() => handleDelete(item.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-stone-400 hover:text-red-500">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {received.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-2">Received</h3>
+              <div className="space-y-2">
+                {received.map(item => (
+                  <div key={item.id} className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50 p-3.5 gap-3 opacity-70">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-stone-700 truncate">{item.client_name}</span>
+                        <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">Received</span>
+                      </div>
+                      <p className="text-xs text-stone-400 truncate mt-0.5">{item.description}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-base font-bold text-green-700">{formatMoney(item.amount)}</span>
+                      <button onClick={() => handleDelete(item.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-400">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modal */}
+      <Modal
+        open={modalOpen}
+        onClose={() => { setModalOpen(false); setEditing(null) }}
+        title={editing ? 'Edit receivable' : 'Add — To Get'}
+      >
+        <div className="space-y-3 p-1">
+          {/* Client selector */}
+          <div>
+            <label className="block text-xs font-medium text-stone-600 mb-1">Client *</label>
+            {clientOptions.length > 0 ? (
+              <select
+                value={form.client_id}
+                onChange={e => handleClientChange(e.target.value)}
+                className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-400"
+              >
+                <option value="">— Select client —</option>
+                {clientOptions.map(c => (
+                  <option key={c.clientId} value={c.clientId}>{c.clientName}</option>
+                ))}
+                <option value="__manual__">Other (type manually)</option>
+              </select>
+            ) : (
+              <Input
+                placeholder="e.g. Aruvi Bakery"
+                value={form.client_name}
+                onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))}
+              />
+            )}
+            {/* Manual name input if "Other" selected or no clients loaded */}
+            {form.client_id === '__manual__' && (
+              <Input
+                className="mt-2"
+                placeholder="Enter client name"
+                value={form.client_name}
+                onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))}
+              />
+            )}
+          </div>
+
+          {/* Project selector — only shown when a real client is selected */}
+          {form.client_id && form.client_id !== '__manual__' && selectedClientProjects.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-stone-600 mb-1">Project</label>
+              <select
+                value={form.project_id}
+                onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))}
+                className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-400"
+              >
+                <option value="">— No specific project —</option>
+                {selectedClientProjects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-stone-600 mb-1">What is it for? *</label>
+            <Input
+              placeholder="e.g. March social media package"
+              value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-stone-600 mb-1">Amount *</label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={form.amount}
+                onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-stone-600 mb-1">Status</label>
+              <Select
+                value={form.status}
+                onChange={e => setForm(f => ({ ...f, status: e.target.value as 'PENDING' | 'RECEIVED' }))}
+                options={[{ value: 'PENDING', label: 'Pending' }, { value: 'RECEIVED', label: 'Received' }]}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-stone-600 mb-1">Due date</label>
+            <Input
+              type="date"
+              value={form.dueDate}
+              onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-stone-600 mb-1">Notes</label>
+            <Input
+              placeholder="Optional notes"
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+            />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" className="flex-1" onClick={() => { setModalOpen(false); setEditing(null) }}>
+              Cancel
+            </Button>
+            <Button className="flex-1" loading={saving} onClick={handleSave}>
+              {editing ? 'Save changes' : 'Add'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}

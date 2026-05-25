@@ -326,9 +326,10 @@ export default function CalendarPage() {
       if (dTime < minTime || dTime > maxTime) continue
 
       const assigneeName = t.assignedTo?.name
+      const showAssignee = user?.role !== 'CLIENT' && assigneeName
       items.push({
         id: `task-${t.id}`,
-        title: `📋 Task: ${t.title}${assigneeName ? ` (${assigneeName})` : ''}`,
+        title: `📋 Task: ${t.title}${showAssignee ? ` (${assigneeName})` : ''}`,
         rawTitle: t.title,
         description: t.description ?? null,
         startTime: t.deadline,
@@ -349,12 +350,13 @@ export default function CalendarPage() {
       const postTime = new Date(c.postDate).getTime()
       const editTime = postTime - 2 * 24 * 60 * 60 * 1000
       const assigneeName = c.assignee?.name
+      const showAssignee = user?.role !== 'CLIENT' && assigneeName
 
       // The content post itself
       if (postTime >= minTime && postTime <= maxTime) {
         items.push({
           id: `post-${c.id}`,
-          title: `🚀 Post: ${c.title}${assigneeName ? ` (${assigneeName})` : ''}`,
+          title: `🚀 Post: ${c.title}${showAssignee ? ` (${assigneeName})` : ''}`,
           rawTitle: c.title,
           description: c.description ?? null,
           startTime: c.postDate,
@@ -375,7 +377,7 @@ export default function CalendarPage() {
       if (editTime >= minTime && editTime <= maxTime) {
         items.push({
           id: `edit-${c.id}`,
-          title: `✂️ Edit: ${c.title}${assigneeName ? ` (${assigneeName})` : ''}`,
+          title: `✂️ Edit: ${c.title}${showAssignee ? ` (${assigneeName})` : ''}`,
           rawTitle: c.title,
           description: c.description ?? null,
           startTime: new Date(editTime).toISOString(),
@@ -801,8 +803,8 @@ export default function CalendarPage() {
                   </a>
                 )}
 
-                {/* Assignee (Tasks & Content) */}
-                {selectedItem.assigneeName && (
+                {/* Assignee (Tasks & Content) — hide for CLIENT */}
+                {selectedItem.assigneeName && user?.role !== 'CLIENT' && (
                   <div className="flex items-center gap-2">
                     <span className="text-stone-400 text-[11px]">Assignee:</span>
                     <span className="text-stone-700 font-semibold text-[11px]">{selectedItem.assigneeName}</span>
@@ -905,8 +907,8 @@ export default function CalendarPage() {
                 </div>
               )}
 
-              {/* Quick Navigation Button for Tasks & Content */}
-              {selectedItem.calendarType === 'task' && (
+              {/* Quick Navigation — hide Go to Tasks for CLIENT */}
+              {selectedItem.calendarType === 'task' && user?.role !== 'CLIENT' && (
                 <div className="pt-2">
                   <Button
                     size="sm"

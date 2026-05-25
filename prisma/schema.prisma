@@ -499,6 +499,22 @@ model Loan {
   @@map("loans")
 }
 
+model Receivable {
+  id          String    @id @default(cuid())
+  client_name String
+  description String
+  amount      Decimal   @db.Decimal(12, 2)
+  status      String    @default("PENDING")
+  due_date    DateTime?
+  notes       String?
+  client_id   String?
+  project_id  String?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @default(now()) @updatedAt
+
+  @@map("receivables")
+}
+
 model Invoice {
   id                String    @id @default(cuid())
   invoice_number    String
