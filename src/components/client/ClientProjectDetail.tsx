@@ -1,11 +1,11 @@
 'use client'
 // src/components/client/ClientProjectDetail.tsx
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, FolderOpen, CheckCircle2, Clock, ExternalLink,
   MessageSquarePlus, Send, ChevronRight, IndianRupee,
-  Star, Loader2
+  Star, Loader2, Film, Calendar, AlertCircle, TrendingUp,
 } from 'lucide-react'
 import { formatMoney, formatDate } from '@/lib/utils'
 import toast from 'react-hot-toast'
@@ -59,6 +59,14 @@ const STATUS_COLORS: Record<string, string> = {
   LEAD: 'bg-violet-100 text-violet-700 border-violet-200',
 }
 
+interface ContentItem {
+  id: string
+  title: string
+  status: string
+  type?: string | null
+  postDate?: string | null
+}
+
 interface ClientProject {
   id: string
   name: string
@@ -70,7 +78,7 @@ interface ClientProject {
   value?: number | null
   driveFolder?: string | null
   tasks?: { id: string; title: string; status: string }[]
-  content?: { id: string; title: string; status: string }[]
+  content?: ContentItem[]
 }
 
 export function ClientProjectDetail({ project }: { project: ClientProject }) {
@@ -84,6 +92,58 @@ export function ClientProjectDetail({ project }: { project: ClientProject }) {
   const completedTasks = project.tasks?.filter((t) => t.status === 'DONE').length ?? 0
   const totalTasks = project.tasks?.length ?? 0
   const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+
+  // ─── Content analysis for "This Month's Content" section ───────────────────
+  const contentStats = useMemo(() => {
+    const allContent = project.content ?? []
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth()
+
+    const isVideo = (c: ContentItem) =>
+      !c.type || ['REEL', 'VIDEO', 'SHORT', 'YOUTUBE'].includes(c.type.toUpperCase())
+
+    const thisMonthAll = allContent.filter((c) => {
+      if (!c.postDate) return false
+      const d = new Date(c.postDate)
+      return d.getFullYear() === year && d.getMonth() === month
+    })
+
+    // Prefer video types; fall back to all content if no videos
+    const thisMonth = thisMonthAll.filter(isVideo).length > 0
+      ? thisMonthAll.filter(isVideo)
+      : thisMonthAll
+
+    // Sort by postDate ascending
+    const sorted = [...thisMonth].sort(
+      (a, b) => new Date(a.postDate!).getTime() - new Date(b.postDate!).getTime()
+    )
+
+    const posted = sorted.filter((c) => c.status === 'POSTED')
+    const upcoming = sorted.filter(
+      (c) => c.status !== 'POSTED' && new Date(c.postDate!) >= now
+    )
+
+    // Items needing client attention
+    const needsReview = allContent.filter((c) =>
+      ['REVIEW', 'PENDING_APPROVAL', 'AWAITING_APPROVAL'].includes(c.status?.toUpperCase?.() ?? '')
+    )
+
+    return {
+      thisMonth: sorted,
+      posted,
+      upcoming,
+      needsReview,
+      firstPosted: posted[0] ?? null,
+      lastPosted: posted[posted.length - 1] ?? null,
+      nextUpcoming: upcoming[0] ?? null,
+      lastOfMonth: upcoming[upcoming.length - 1] ?? null,
+      totalAllTime: allContent.filter(isVideo).length,
+    }
+  }, [project.content])
+
+  const MONTH_NAME = new Date().toLocaleString('default', { month: 'long' })
+  // ────────────────────────────────────────────────────────────────────────────
 
   const sendRequest = async () => {
     if (!requestText.trim()) return
@@ -242,6 +302,189 @@ export function ClientProjectDetail({ project }: { project: ClientProject }) {
               </div>
             </div>
           </div>
+
+          {/* ── This Month's Content ─────────────────────────────────────────── */}
+          {contentStats.thisMonth.length > 0 || contentStats.needsReview.length > 0 ? (
+            <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 space-y-5">
+              {/* Header */}
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center">
+                  <Film size={14} className="text-rose-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-stone-900">{MONTH_NAME}'s Content</p>
+                  <p className="text-[10px] text-stone-400">Your video schedule for this month</p>
+                </div>
+                {contentStats.totalAllTime > 0 && (
+                  <span className="ml-auto text-[10px] text-stone-400 font-medium">
+                    {contentStats.totalAllTime} videos all time
+                  </span>
+                )}
+              </div>
+
+              {/* Needs-review alert */}
+              {contentStats.needsReview.length > 0 && (
+                <div className="flex items-start gap-2.5 rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-3">
+                  <AlertCircle size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-800">
+                      {contentStats.needsReview.length} item{contentStats.needsReview.length > 1 ? 's' : ''} waiting for your review
+                    </p>
+                    <p className="text-[10px] text-amber-600 mt-0.5">
+                      {contentStats.needsReview.map(c => c.title).join(', ')}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {contentStats.thisMonth.length > 0 && (
+                <>
+                  {/* Progress bar */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wide">Posted this month</span>
+                      <span className="text-[11px] font-bold text-stone-700">
+                        {contentStats.posted.length} / {contentStats.thisMonth.length}
+                      </span>
+                    </div>
+                    <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-rose-400 to-pink-500 rounded-full transition-all duration-700"
+                        style={{
+                          width: contentStats.thisMonth.length > 0
+                            ? `${Math.round((contentStats.posted.length / contentStats.thisMonth.length) * 100)}%`
+                            : '0%'
+                        }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-stone-400 mt-1">
+                      {contentStats.upcoming.length > 0
+                        ? `${contentStats.upcoming.length} more scheduled`
+                        : contentStats.posted.length === contentStats.thisMonth.length
+                        ? '🎉 All videos posted!'
+                        : 'Dates pending'}
+                    </p>
+                  </div>
+
+                  {/* Key milestone cards */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {/* First video */}
+                    <div className={`rounded-xl border p-3 ${contentStats.firstPosted ? 'border-green-100 bg-green-50/60' : 'border-stone-100 bg-stone-50 opacity-50'}`}>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-green-600 mb-1 flex items-center gap-1">
+                        <CheckCircle2 size={9} /> First video posted
+                      </p>
+                      {contentStats.firstPosted ? (
+                        <>
+                          <p className="text-xs font-semibold text-stone-800 leading-snug truncate">{contentStats.firstPosted.title}</p>
+                          <p className="text-[10px] text-stone-500 mt-0.5">{formatDate(contentStats.firstPosted.postDate!)}</p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-stone-400">None yet</p>
+                      )}
+                    </div>
+
+                    {/* Latest posted */}
+                    <div className={`rounded-xl border p-3 ${contentStats.lastPosted ? 'border-emerald-100 bg-emerald-50/60' : 'border-stone-100 bg-stone-50 opacity-50'}`}>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-600 mb-1 flex items-center gap-1">
+                        <TrendingUp size={9} /> Latest posted
+                      </p>
+                      {contentStats.lastPosted && contentStats.lastPosted.id !== contentStats.firstPosted?.id ? (
+                        <>
+                          <p className="text-xs font-semibold text-stone-800 leading-snug truncate">{contentStats.lastPosted.title}</p>
+                          <p className="text-[10px] text-stone-500 mt-0.5">{formatDate(contentStats.lastPosted.postDate!)}</p>
+                        </>
+                      ) : contentStats.lastPosted ? (
+                        <>
+                          <p className="text-xs font-semibold text-stone-800 leading-snug truncate">{contentStats.lastPosted.title}</p>
+                          <p className="text-[10px] text-stone-500 mt-0.5">{formatDate(contentStats.lastPosted.postDate!)}</p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-stone-400">None yet</p>
+                      )}
+                    </div>
+
+                    {/* Next to go live */}
+                    <div className={`rounded-xl border p-3 ${contentStats.nextUpcoming ? 'border-blue-100 bg-blue-50/60' : 'border-stone-100 bg-stone-50 opacity-50'}`}>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-blue-500 mb-1 flex items-center gap-1">
+                        <Calendar size={9} /> Next to go live
+                      </p>
+                      {contentStats.nextUpcoming ? (
+                        <>
+                          <p className="text-xs font-semibold text-stone-800 leading-snug truncate">{contentStats.nextUpcoming.title}</p>
+                          <p className="text-[10px] text-stone-500 mt-0.5">{formatDate(contentStats.nextUpcoming.postDate!)}</p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-stone-400">All done!</p>
+                      )}
+                    </div>
+
+                    {/* Last video of month */}
+                    <div className={`rounded-xl border p-3 ${contentStats.lastOfMonth ? 'border-violet-100 bg-violet-50/60' : 'border-stone-100 bg-stone-50 opacity-50'}`}>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-violet-500 mb-1 flex items-center gap-1">
+                        <Film size={9} /> Last of {MONTH_NAME}
+                      </p>
+                      {contentStats.lastOfMonth ? (
+                        <>
+                          <p className="text-xs font-semibold text-stone-800 leading-snug truncate">{contentStats.lastOfMonth.title}</p>
+                          <p className="text-[10px] text-stone-500 mt-0.5">{formatDate(contentStats.lastOfMonth.postDate!)}</p>
+                        </>
+                      ) : contentStats.lastPosted ? (
+                        <>
+                          <p className="text-xs font-semibold text-stone-800 leading-snug truncate">{contentStats.lastPosted.title}</p>
+                          <p className="text-[10px] text-stone-500 mt-0.5">{formatDate(contentStats.lastPosted.postDate!)}</p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-stone-400">TBD</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Full month timeline list */}
+                  <div>
+                    <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mb-2">All {MONTH_NAME} content</p>
+                    <div className="space-y-1.5">
+                      {contentStats.thisMonth.map((item) => {
+                        const isPosted = item.status === 'POSTED'
+                        const isPast = item.postDate ? new Date(item.postDate) < new Date() : false
+                        return (
+                          <div key={item.id} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 ${
+                            isPosted ? 'bg-green-50 border border-green-100' : 'bg-stone-50 border border-stone-100'
+                          }`}>
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              isPosted ? 'bg-green-500' : isPast ? 'bg-amber-400' : 'bg-stone-200'
+                            }`}>
+                              {isPosted ? (
+                                <CheckCircle2 size={11} className="text-white" />
+                              ) : (
+                                <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-medium truncate ${isPosted ? 'text-stone-700' : 'text-stone-600'}`}>
+                                {item.title}
+                              </p>
+                            </div>
+                            <span className="text-[10px] text-stone-400 flex-shrink-0">
+                              {item.postDate ? formatDate(item.postDate) : '—'}
+                            </span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                              isPosted
+                                ? 'bg-green-100 text-green-700'
+                                : isPast
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-blue-50 text-blue-500'
+                            }`}>
+                              {isPosted ? 'Live' : isPast ? 'Late' : 'Sched.'}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
 
           {/* Drive Links */}
           {driveLinks.length > 0 && (
