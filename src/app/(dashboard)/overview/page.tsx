@@ -15,6 +15,7 @@ import {
   CheckSquare, FileVideo, FolderKanban, Users, AlertCircle,
   Calendar as CalendarIcon, IndianRupee, TrendingUp, TrendingDown,
   BarChart2, Eye, Heart, MessageCircle, Share2,
+  Film, CheckCircle2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { ActiveTasksList } from './ActiveTasksList'
@@ -121,6 +122,57 @@ async function getStats(userId: string, role: string) {
   const filteredContent = role === 'CLIENT'
     ? (recentContent as any[]).filter((c: any) => c.project?.clientId === userId)
     : (recentContent as any[])
+
+  // Client content timeline: this-month stats
+  let clientMonthTimeline: {
+    total: number
+    posted: number
+    firstPosted: any | null
+    lastPosted: any | null
+    nextUpcoming: any | null
+    lastOfMonth: any | null
+    needsReview: number
+    items: any[]
+  } | null = null
+
+  if (role === 'CLIENT' && filteredContent.length > 0) {
+    const tNow = new Date()
+    const tY = tNow.getFullYear(), tM = tNow.getMonth()
+
+    const isVid = (c: any) =>
+      !c.type || ['REEL','VIDEO','SHORT','YOUTUBE'].includes((c.type ?? '').toUpperCase())
+
+    const monthAll = filteredContent.filter((c: any) => {
+      if (!c.postDate) return false
+      const d = new Date(c.postDate)
+      return d.getFullYear() === tY && d.getMonth() === tM
+    })
+
+    const monthFiltered = monthAll.filter(isVid).length > 0 ? monthAll.filter(isVid) : monthAll
+    const sortedMonth = [...monthFiltered].sort((a: any, b: any) =>
+      new Date(a.postDate).getTime() - new Date(b.postDate).getTime()
+    )
+    const postedMonth = sortedMonth.filter((c: any) => c.status === 'POSTED')
+    const upcomingMonth = sortedMonth.filter((c: any) =>
+      c.status !== 'POSTED' && new Date(c.postDate) >= tNow
+    )
+    const needsReviewCount = filteredContent.filter((c: any) =>
+      ['REVIEW','PENDING_APPROVAL','AWAITING_APPROVAL'].includes((c.status ?? '').toUpperCase())
+    ).length
+
+    if (sortedMonth.length > 0) {
+      clientMonthTimeline = {
+        total: sortedMonth.length,
+        posted: postedMonth.length,
+        firstPosted: postedMonth[0] ?? null,
+        lastPosted: postedMonth[postedMonth.length - 1] ?? null,
+        nextUpcoming: upcomingMonth[0] ?? null,
+        lastOfMonth: sortedMonth[sortedMonth.length - 1] ?? null,
+        needsReview: needsReviewCount,
+        items: sortedMonth,
+      }
+    }
+  }
 
   const totalUsers = canSeeTeamCount
     ? await safe(() => sbCount('users', {}), 0)
@@ -285,6 +337,7 @@ async function getStats(userId: string, role: string) {
     clientTotalValue,
     pendingLoans,
     pendingScriptingAlerts,
+    clientMonthTimeline,
   }
 }
 
@@ -444,6 +497,145 @@ export default async function OverviewPage() {
             )
           })}
         </div>
+
+        {/* ── Client: This Month's Content Timeline ── */}
+        {isClient && stats.clientMonthTimeline && (
+          <div className="bg-white rounded-xl border border-stone-100 shadow-sm overflow-hidden">
+            {/* Header */}
+            <div className="px-5 py-3.5 border-b border-stone-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Film size={13} className="text-rose-400" />
+                <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide">
+                  {new Date().toLocaleString('default', { month: 'long' })} Content
+                </p>
+              </div>
+              <Link href="/projects" className="text-[10px] text-stone-400 hover:text-stone-700 uppercase tracking-wide">
+                View projects →
+              </Link>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Needs review alert */}
+              {stats.clientMonthTimeline.needsReview > 0 && (
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 text-[11px] font-semibold text-amber-700">
+                  <AlertCircle size={12} className="flex-shrink-0" />
+                  {stats.clientMonthTimeline.needsReview} content item{stats.clientMonthTimeline.needsReview > 1 ? 's' : ''} waiting for your review
+                </div>
+              )}
+
+              {/* Progress bar */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wide">Posted this month</span>
+                  <span className="text-[11px] font-bold text-stone-700">
+                    {stats.clientMonthTimeline.posted} / {stats.clientMonthTimeline.total}
+                  </span>
+                </div>
+                <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-rose-400 to-pink-500 rounded-full transition-all duration-700"
+                    style={{ width: `${stats.clientMonthTimeline.total > 0 ? Math.round((stats.clientMonthTimeline.posted / stats.clientMonthTimeline.total) * 100) : 0}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* 4 milestone cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* First Posted */}
+                <div className="bg-stone-50 rounded-lg p-3">
+                  <p className="text-[9px] font-semibold text-stone-400 uppercase tracking-wide mb-1">First Posted</p>
+                  {stats.clientMonthTimeline.firstPosted ? (
+                    <>
+                      <p className="text-xs font-bold text-stone-800 truncate">{stats.clientMonthTimeline.firstPosted.title}</p>
+                      <p className="text-[10px] text-emerald-600 font-medium mt-0.5">{formatDate(stats.clientMonthTimeline.firstPosted.postDate)}</p>
+                    </>
+                  ) : (
+                    <p className="text-[10px] text-stone-400 italic">None yet</p>
+                  )}
+                </div>
+
+                {/* Latest Posted */}
+                <div className="bg-stone-50 rounded-lg p-3">
+                  <p className="text-[9px] font-semibold text-stone-400 uppercase tracking-wide mb-1">Latest Posted</p>
+                  {stats.clientMonthTimeline.lastPosted ? (
+                    <>
+                      <p className="text-xs font-bold text-stone-800 truncate">{stats.clientMonthTimeline.lastPosted.title}</p>
+                      <p className="text-[10px] text-emerald-600 font-medium mt-0.5">{formatDate(stats.clientMonthTimeline.lastPosted.postDate)}</p>
+                    </>
+                  ) : (
+                    <p className="text-[10px] text-stone-400 italic">None yet</p>
+                  )}
+                </div>
+
+                {/* Next Upcoming */}
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <p className="text-[9px] font-semibold text-blue-400 uppercase tracking-wide mb-1">Next Scheduled</p>
+                  {stats.clientMonthTimeline.nextUpcoming ? (
+                    <>
+                      <p className="text-xs font-bold text-stone-800 truncate">{stats.clientMonthTimeline.nextUpcoming.title}</p>
+                      <p className="text-[10px] text-blue-600 font-medium mt-0.5">{formatDate(stats.clientMonthTimeline.nextUpcoming.postDate)}</p>
+                    </>
+                  ) : (
+                    <p className="text-[10px] text-stone-400 italic">All done!</p>
+                  )}
+                </div>
+
+                {/* Last of Month */}
+                <div className="bg-violet-50 rounded-lg p-3">
+                  <p className="text-[9px] font-semibold text-violet-400 uppercase tracking-wide mb-1">Last of Month</p>
+                  {stats.clientMonthTimeline.lastOfMonth ? (
+                    <>
+                      <p className="text-xs font-bold text-stone-800 truncate">{stats.clientMonthTimeline.lastOfMonth.title}</p>
+                      <p className="text-[10px] text-violet-600 font-medium mt-0.5">{formatDate(stats.clientMonthTimeline.lastOfMonth.postDate)}</p>
+                    </>
+                  ) : (
+                    <p className="text-[10px] text-stone-400 italic">—</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Timeline list */}
+              {stats.clientMonthTimeline.items.length > 0 && (
+                <div className="border border-stone-100 rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 bg-stone-50 border-b border-stone-100">
+                    <p className="text-[9px] font-semibold text-stone-500 uppercase tracking-wide">Full Schedule</p>
+                  </div>
+                  <div className="divide-y divide-stone-50 max-h-64 overflow-y-auto">
+                    {stats.clientMonthTimeline.items.map((item: any) => {
+                      const isPosted = item.status === 'POSTED'
+                      const isPast = !isPosted && item.postDate && new Date(item.postDate) < new Date()
+                      return (
+                        <div key={item.id} className="flex items-center gap-3 px-3 py-2.5">
+                          <CheckCircle2
+                            size={13}
+                            className={`flex-shrink-0 ${isPosted ? 'text-emerald-500' : 'text-stone-200'}`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs truncate ${isPosted ? 'text-stone-500 line-through' : 'text-stone-800 font-medium'}`}>
+                              {item.title}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {isPosted && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Live</span>
+                            )}
+                            {isPast && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">Late</span>
+                            )}
+                            {!isPosted && !isPast && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600">Sched.</span>
+                            )}
+                            <span className="text-[9px] text-stone-400">{formatDate(item.postDate)}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Monthly money strip — admin only */}
         {isAdmin && (
