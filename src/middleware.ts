@@ -47,9 +47,9 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Client role: restrict to /overview, /clients, /settings (for password change), /projects, /calendar
+  // Client role: restrict to specific pages only
   if (user.role === 'CLIENT') {
-    const allowedForClient = ['/overview', '/clients', '/settings', '/projects', '/calendar']
+    const allowedForClient = ['/overview', '/clients', '/settings', '/projects', '/calendar', '/content']
     const isAllowed = allowedForClient.some((p) => pathname.startsWith(p))
     if (!isAllowed && !pathname.startsWith('/api')) {
       return NextResponse.redirect(new URL('/overview', request.url))

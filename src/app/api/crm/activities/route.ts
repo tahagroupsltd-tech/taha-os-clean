@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
 import { sbSelect, sbInsert, sbFindOne, nowTs } from '@/lib/supa'
 
+const canViewCRM = (role: string) => role === 'ADMIN' || role === 'MANAGER'
+
 export const dynamic = 'force-dynamic'
 
 const ACTIVITY_SELECT = '*,createdBy:users!created_by_id(id,name),lead:crm_leads!lead_id(id,title),deal:crm_deals!deal_id(id,title),contact:crm_contacts!contact_id(id,name)'
@@ -11,6 +13,7 @@ export async function GET(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!canViewCRM(user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { searchParams } = new URL(req.url)
     const leadId = searchParams.get('leadId')
@@ -39,6 +42,7 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getUserFromRequest(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!canViewCRM(user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const body = await req.json()
     const { type, subject, description, dueDate, leadId, dealId, contactId } = body

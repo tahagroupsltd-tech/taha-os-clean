@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
     select: CONTENT_SELECT,
     filters,
     order: 'createdAt.desc',
+    limit: 200,
   })
 
   // Client: filter by their projects

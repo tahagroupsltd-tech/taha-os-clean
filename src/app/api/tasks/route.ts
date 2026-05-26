@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
     select: TASK_SELECT,
     filters,
     order: 'priority.desc,deadline.asc,createdAt.desc',
+    limit: 200,
   })
 
   // Client: only show tasks belonging to projects where they are the client

@@ -1,9 +1,14 @@
 // src/app/api/ai/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { getUserFromRequest } from '@/lib/auth'
 
 const TASK_KEYWORDS = ['idea', 'generate', 't-shirt', 'create']
 
 export async function POST(req: NextRequest) {
+  // Auth guard — this endpoint was previously open to the internet
+  const user = await getUserFromRequest(req)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   try {
     const body = await req.json().catch(() => null)
 
