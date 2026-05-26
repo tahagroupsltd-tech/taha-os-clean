@@ -118,10 +118,8 @@ async function getStats(userId: string, role: string) {
     return st >= startOfDay && st <= endOfWeek
   }).slice(0, 5)
 
-  // Client filter for content
-  const filteredContent = role === 'CLIENT'
-    ? (recentContent as any[]).filter((c: any) => c.project?.clientId === userId)
-    : (recentContent as any[])
+  // recentContent is already scoped by contentFilters (projectId filter for CLIENT)
+  const filteredContent = recentContent as any[]
 
   // Client content timeline: this-month stats
   let clientMonthTimeline: {
