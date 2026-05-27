@@ -334,8 +334,17 @@ export default function ContentPage() {
   }, [])
   useEffect(() => { fetchContent() }, [fetchContent])
   useEffect(() => {
+    // Admin/Manager: load all users and projects for dropdowns
     if (user?.role === 'ADMIN' || user?.role === 'MANAGER') {
       fetch('/api/users?excludeRole=CLIENT').then(r => r.json()).then(j => setUsers(j.data ?? []))
+      fetch('/api/projects').then(r => r.json()).then(j => setProjects(j.data ?? []))
+    }
+    // CLIENT: load their own projects for the calendar filter
+    if (user?.role === 'CLIENT') {
+      fetch('/api/projects').then(r => r.json()).then(j => setProjects(j.data ?? []))
+    }
+    // Employee roles: load projects for filter too
+    if (user?.role === 'EMPLOYEE' || ['EDITOR','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER'].includes(user?.role ?? '')) {
       fetch('/api/projects').then(r => r.json()).then(j => setProjects(j.data ?? []))
     }
   }, [user])

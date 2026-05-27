@@ -13,7 +13,7 @@ export default async function TeamPage() {
 
   const rows = await sbSelect('users', {
     select: 'id,username,name,role,phone,email,isActive,createdAt',
-    filters: {},
+    filters: { role: 'neq.CLIENT' },
     order: 'createdAt.desc',
   }).catch(() => [] as any[])
 

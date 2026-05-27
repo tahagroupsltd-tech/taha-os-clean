@@ -65,8 +65,12 @@ async function getStats(userId: string, role: string) {
 
   const contentFilters: Record<string, string> = {}
   if (isEmployee) contentFilters.assigneeId = `eq.${userId}`
-  if (role === 'CLIENT' && clientProjectIds.length > 0) {
-    contentFilters.projectId = `in.(${clientProjectIds.join(',')})`
+  if (role === 'CLIENT') {
+    if (clientProjectIds.length > 0) {
+      contentFilters.projectId = `in.(${clientProjectIds.join(',')})`
+    } else {
+      contentFilters.projectId = 'eq.none'
+    }
   }
 
   const projectFilters: Record<string, string> = {}
@@ -150,6 +154,12 @@ async function getStats(userId: string, role: string) {
     const sortedMonth = [...monthFiltered].sort((a: any, b: any) =>
       new Date(a.postDate).getTime() - new Date(b.postDate).getTime()
     )
+
+    const allPosted = [...filteredContent]
+      .filter((c: any) => c.status === 'POSTED')
+      .sort((a: any, b: any) => new Date(a.updatedAt ?? a.postDate).getTime() - new Date(b.updatedAt ?? b.postDate).getTime())
+    const lastPostedOverall = allPosted[allPosted.length - 1] ?? null
+
     const postedMonth = sortedMonth.filter((c: any) => c.status === 'POSTED')
     const upcomingMonth = sortedMonth.filter((c: any) =>
       c.status !== 'POSTED' && new Date(c.postDate) >= tNow
@@ -163,7 +173,7 @@ async function getStats(userId: string, role: string) {
         total: sortedMonth.length,
         posted: postedMonth.length,
         firstPosted: postedMonth[0] ?? null,
-        lastPosted: postedMonth[postedMonth.length - 1] ?? null,
+        lastPosted: lastPostedOverall,
         nextUpcoming: upcomingMonth[0] ?? null,
         lastOfMonth: sortedMonth[sortedMonth.length - 1] ?? null,
         needsReview: needsReviewCount,
@@ -220,7 +230,7 @@ async function getStats(userId: string, role: string) {
   // Engagement metrics — top content by views
   const rawMetrics = await safe(
     () => sbSelect('content_metrics', {
-      select: '*,content:content!content_id(id,title,type,project:projects!projectId(id,name))',
+      select: '*,content:content!content_id(id,title,type,project:projects!projectId(id,name,clientId))',
       filters: {},
       order: 'views.desc,recorded_at.desc',
       limit: 20,
@@ -231,7 +241,14 @@ async function getStats(userId: string, role: string) {
   const dedupedMetrics = rawMetrics.filter((m: any) => {
     if (seenMetrics.has(m.content_id)) return false
     seenMetrics.add(m.content_id); return true
-  }).slice(0, 5)
+  })
+
+  // Filter top content metrics to client's own projects only to prevent data leakage
+  const filteredMetrics = role === 'CLIENT'
+    ? dedupedMetrics.filter((m: any) => m.content?.project && clientProjectIds.includes(m.content.projectId))
+    : dedupedMetrics
+
+  const topMetrics = filteredMetrics.slice(0, 5)
 
   let clientOutstanding = 0
   let clientPaid = 0
@@ -329,7 +346,7 @@ async function getStats(userId: string, role: string) {
     monthlyIncome,
     monthlyExpense,
     topClients,
-    topMetrics: dedupedMetrics,
+    topMetrics,
     clientOutstanding,
     clientPaid,
     clientTotalValue,
@@ -507,8 +524,8 @@ export default async function OverviewPage() {
                   {new Date().toLocaleString('default', { month: 'long' })} Content
                 </p>
               </div>
-              <Link href="/projects" className="text-[10px] text-stone-400 hover:text-stone-700 uppercase tracking-wide">
-                View projects →
+              <Link href="/content" className="text-[10px] text-stone-400 hover:text-stone-700 uppercase tracking-wide">
+                View content →
               </Link>
             </div>
 
@@ -558,7 +575,9 @@ export default async function OverviewPage() {
                   {stats.clientMonthTimeline.lastPosted ? (
                     <>
                       <p className="text-xs font-bold text-stone-800 truncate">{stats.clientMonthTimeline.lastPosted.title}</p>
-                      <p className="text-[10px] text-emerald-600 font-medium mt-0.5">{formatDate(stats.clientMonthTimeline.lastPosted.postDate)}</p>
+                      <p className="text-[10px] text-emerald-600 font-medium mt-0.5">
+                        {formatDate(stats.clientMonthTimeline.lastPosted.updatedAt ?? stats.clientMonthTimeline.lastPosted.postDate)}
+                      </p>
                     </>
                   ) : (
                     <p className="text-[10px] text-stone-400 italic">None yet</p>

@@ -1671,7 +1671,7 @@ function ReceivablesTab({
             />
           </div>
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" className="flex-1" onClick={() => { setModalOpen(false); setEditing(null) }}>
+            <Button variant="secondary" className="flex-1" onClick={() => { setModalOpen(false); setEditing(null) }}>
               Cancel
             </Button>
             <Button className="flex-1" loading={saving} onClick={handleSave}>

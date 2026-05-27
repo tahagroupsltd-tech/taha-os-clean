@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
         // Next scheduled video post
         const nextPosts = await sbSelect('content', {
           select: 'title,postDate,status,type',
-          filters: { projectId: `eq.${projectId}`, postDate: `gte.${new Date().toISOString()}` },
+          filters: { projectId: `eq.${projectId}`, type: 'in.(REEL,VIDEO)', postDate: `gte.${new Date().toISOString()}` },
           order: 'postDate.asc',
           limit: 1,
         }).catch(() => [] as any[])
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
         // Last posted video
         const lastPosts = await sbSelect('content', {
           select: 'title,postDate,status,type',
-          filters: { projectId: `eq.${projectId}`, status: 'eq.POSTED' },
+          filters: { projectId: `eq.${projectId}`, type: 'in.(REEL,VIDEO)', status: 'eq.POSTED' },
           order: 'postDate.desc',
           limit: 1,
         }).catch(() => [] as any[])
