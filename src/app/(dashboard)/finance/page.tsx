@@ -28,6 +28,7 @@ interface TxForm {
   notes: string
   date: string
   projectId: string
+  loanId: string
 }
 
 const todayISO = () => new Date().toISOString().split('T')[0]
@@ -40,6 +41,7 @@ const EMPTY: TxForm = {
   notes: '',
   date: todayISO(),
   projectId: '',
+  loanId: '',
 }
 
 interface FinanceSummary {
@@ -60,6 +62,7 @@ export default function FinancePage() {
   const [syncing, setSyncing] = useState(false)
   const [activeTab, setActiveTab] = useState<'transactions' | 'invoices' | 'loans' | 'receivables' | 'analytics'>('transactions')
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
+  const [loansList, setLoansList] = useState<{ id: string; title: string; remaining_amount: number }[]>([])
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState<string>('')
   const [modalOpen, setModalOpen] = useState(false)
@@ -72,8 +75,6 @@ export default function FinancePage() {
   const [pendingLoans, setPendingLoans] = useState(0)
   const [receivableModalOpen, setReceivableModalOpen] = useState(false)
   const [editingReceivable, setEditingReceivable] = useState<ReceivableRow | null>(null)
-
-
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true)
@@ -112,6 +113,18 @@ export default function FinancePage() {
     }
   }, [])
 
+  const fetchLoansList = useCallback(async () => {
+    try {
+      const res = await fetch('/api/loans')
+      const json = await res.json()
+      if (res.ok) {
+        setLoansList(json.data ?? [])
+      }
+    } catch (err) {
+      console.error('Error fetching loans list:', err)
+    }
+  }, [])
+
   useEffect(() => { fetchTransactions() }, [fetchTransactions])
   useEffect(() => { if (isFounder) fetchLiveSummary() }, [isFounder, fetchLiveSummary])
   useEffect(() => { if (isFounder) fetchPendingLoans() }, [isFounder, fetchPendingLoans])
@@ -119,8 +132,9 @@ export default function FinancePage() {
   useEffect(() => {
     if (user?.role !== 'CLIENT') {
       fetch('/api/projects').then(r => r.json()).then(j => setProjects(j.data ?? []))
+      fetchLoansList()
     }
-  }, [user])
+  }, [user, fetchLoansList])
 
   const openCreate = () => {
     setEditing(null)
@@ -138,6 +152,7 @@ export default function FinancePage() {
       notes: t.notes ?? '',
       date: t.date.split('T')[0],
       projectId: t.projectId ?? '',
+      loanId: (t as any).loanId ?? '',
     })
     setModalOpen(true)
   }
@@ -157,6 +172,7 @@ export default function FinancePage() {
         notes: form.notes || null,
         date: form.date,
         projectId: form.projectId || null,
+        loanId: form.type === 'EXPENSE' ? (form.loanId || null) : null,
       }
       const res = editing
         ? await fetch(`/api/transactions/${editing.id}`, {
@@ -174,6 +190,8 @@ export default function FinancePage() {
       setModalOpen(false)
       fetchTransactions()
       fetchLiveSummary()
+      fetchPendingLoans()
+      fetchLoansList()
       router.refresh()
     } catch (err: any) {
       toast.error(err.message)
@@ -189,10 +207,28 @@ export default function FinancePage() {
       toast.success('Deleted')
       fetchTransactions()
       fetchLiveSummary()
+      fetchPendingLoans()
+      fetchLoansList()
       router.refresh()
     } else {
       toast.error('Only admins can delete transactions')
     }
+  }
+
+  const handleLogRepayment = (loanId: string, loanTitle: string, remainingAmount: number) => {
+    setEditing(null)
+    setForm({
+      title: `Repayment: ${loanTitle}`,
+      amount: String(remainingAmount),
+      type: 'EXPENSE',
+      category: 'OTHER',
+      notes: `Repayment for loan: ${loanTitle}`,
+      date: todayISO(),
+      projectId: '',
+      loanId: loanId,
+    })
+    setModalOpen(true)
+    setActiveTab('transactions')
   }
 
   // Block non-founder access at the page level too (not just at the API)
@@ -452,6 +488,24 @@ export default function FinancePage() {
               )}
             </div>
           )}
+          {form.type === 'EXPENSE' && loansList.length > 0 && (
+            <div className="col-span-2">
+              <Select
+                label="💸 Link to Loan / Repayment (optional)"
+                placeholder="Not a loan repayment"
+                options={loansList
+                  .filter(l => (l.remaining_amount ?? 0) > 0 || l.id === form.loanId)
+                  .map((l) => ({ value: l.id, label: `${l.title} (Owed: ${formatMoney(l.remaining_amount ?? 0)})` }))}
+                value={form.loanId}
+                onChange={(e) => setForm({ ...form, loanId: e.target.value })}
+              />
+              {form.loanId && (
+                <p className="text-[11px] text-green-600 mt-1">
+                  Linking this expense will automatically reduce the remaining amount owed on the loan.
+                </p>
+              )}
+            </div>
+          )}
           <div className="col-span-2">
             <label className="text-xs font-medium text-stone-600 uppercase tracking-wide block mb-1.5">
               Notes
@@ -484,7 +538,11 @@ export default function FinancePage() {
             setModalOpen={setLoanModalOpen}
             editing={editingLoan}
             setEditing={setEditingLoan}
-            onRefresh={fetchPendingLoans}
+            onLogRepayment={handleLogRepayment}
+            onRefresh={() => {
+              fetchPendingLoans()
+              fetchLoansList()
+            }}
           />
         )}
         {activeTab === 'receivables' && (
@@ -941,6 +999,8 @@ interface LoanRow {
   notes: string | null
   created_at: string
   updated_at: string
+  repaid_amount?: number
+  remaining_amount?: number
 }
 
 interface LoanForm {
@@ -965,12 +1025,14 @@ function LoansTab({
   editing,
   setEditing,
   onRefresh,
+  onLogRepayment,
 }: {
   modalOpen: boolean
   setModalOpen: (open: boolean) => void
   editing: LoanRow | null
   setEditing: (loan: LoanRow | null) => void
   onRefresh?: () => void
+  onLogRepayment?: (loanId: string, title: string, remainingAmount: number) => void
 }) {
   const [loans, setLoans] = useState<LoanRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -1138,7 +1200,9 @@ function LoansTab({
               <thead>
                 <tr className="bg-stone-50/75 border-b border-stone-100 text-stone-500 font-semibold">
                   <th className="p-3">Title</th>
-                  <th className="p-3">Amount</th>
+                  <th className="p-3">Borrowed</th>
+                  <th className="p-3">Paid Back</th>
+                  <th className="p-3">Owed (Remaining)</th>
                   <th className="p-3">Status</th>
                   <th className="p-3">Due Date</th>
                   <th className="p-3">Notes</th>
@@ -1150,34 +1214,49 @@ function LoansTab({
                   <tr key={loan.id} className="hover:bg-stone-50/50">
                     <td className="p-3 font-semibold text-stone-900">{loan.title}</td>
                     <td className="p-3 font-bold text-stone-900">{formatMoney(loan.amount)}</td>
+                    <td className="p-3 text-green-600 font-medium">{formatMoney(loan.repaid_amount ?? 0)}</td>
+                    <td className="p-3 font-bold text-red-600">
+                      {formatMoney(loan.remaining_amount ?? loan.amount)}
+                    </td>
                     <td className="p-3">
                       <button
                         onClick={() => toggleStatus(loan)}
                         className={cn(
                           'px-2 py-0.5 rounded font-semibold text-[10px] uppercase tracking-wide transition-colors',
-                          loan.status === 'PAID'
+                          loan.status === 'PAID' || (loan.remaining_amount ?? loan.amount) === 0
                             ? 'bg-green-50 text-green-700 border border-green-200'
                             : 'bg-red-50 text-red-700 border border-red-200'
                         )}
                         title="Click to toggle status"
                       >
-                        {loan.status}
+                        {loan.status === 'PAID' || (loan.remaining_amount ?? loan.amount) === 0 ? 'PAID' : 'PENDING'}
                       </button>
                     </td>
                     <td className="p-3 text-stone-500">{formatDate(loan.due_date)}</td>
                     <td className="p-3 text-stone-500 max-w-[200px] truncate" title={loan.notes ?? ''}>
                       {loan.notes ?? '—'}
                     </td>
-                    <td className="p-3 text-right space-x-1">
+                    <td className="p-3 text-right space-x-2">
+                      {loan.status !== 'PAID' && (loan.remaining_amount ?? loan.amount) > 0 && (
+                        <button
+                          onClick={() => onLogRepayment?.(loan.id, loan.title, loan.remaining_amount ?? loan.amount)}
+                          className="px-2 py-1 bg-stone-900 text-white rounded text-[10px] font-semibold hover:bg-stone-700 transition-colors inline-flex items-center gap-1"
+                          title="Log Repayment"
+                        >
+                          <Plus size={10} /> Repay
+                        </button>
+                      )}
                       <button
                         onClick={() => setEditing(loan)}
                         className="p-1 text-stone-300 hover:text-stone-700 inline-flex items-center"
+                        title="Edit Loan"
                       >
                         <Pencil size={11} />
                       </button>
                       <button
                         onClick={() => handleDelete(loan.id)}
                         className="p-1 text-stone-300 hover:text-red-500 inline-flex items-center"
+                        title="Delete Loan"
                       >
                         <Trash2 size={11} />
                       </button>

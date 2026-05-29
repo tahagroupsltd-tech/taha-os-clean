@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   if (!canEditFinance(user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const { title, amount, type, category, notes, date, projectId } = body
+  const { title, amount, type, category, notes, date, projectId, loanId } = body
 
   if (!title || !amount || !type) {
     return NextResponse.json({ error: 'Title, amount, and type are required' }, { status: 400 })
@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
     date: date ? new Date(date).toISOString() : now,
     ownerId: user.id,
     projectId: projectId || null,
+    loanId: loanId || null,
     createdAt: now,
     updatedAt: now,
   })

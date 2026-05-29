@@ -307,14 +307,17 @@ model Transaction {
   date        DateTime            @default(now())
   ownerId     String
   projectId   String?
+  loanId      String?
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
   owner       User     @relation("TransactionOwner", fields: [ownerId], references: [id])
   project     Project? @relation(fields: [projectId], references: [id])
+  loan        Loan?    @relation(fields: [loanId], references: [id], onDelete: SetNull)
 
   @@index([date])
   @@index([ownerId])
+  @@index([loanId])
   @@map("transactions")
 }
 
@@ -495,6 +498,7 @@ model Loan {
   notes     String?
   created_at DateTime  @default(now())
   updated_at DateTime  @default(now()) @updatedAt
+  repayments Transaction[]
 
   @@map("loans")
 }

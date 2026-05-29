@@ -8,7 +8,8 @@ _Date: May 2026_
 > This report details the key fixes completed in our second-pass audit. The goals were:
 > 1. Ensuring complete data isolation for client accounts so clients can only see their own metrics, posts, tasks, and notes (and never anyone else's).
 > 2. Resolving key bugs reported with the overview page, reels, dates, and navigation buttons.
-> 3. Resolving compilation issues to ensure a clean, production-ready build.
+> 3. Introducing dynamic loan repayment tracking so repayments automatically reduce outstanding balances.
+> 4. Resolving compilation issues to ensure a clean, production-ready build.
 
 ---
 
@@ -20,7 +21,7 @@ _Date: May 2026_
 - **Top Content Metrics Leakage:** The "Top Content Performance" widget was fetching the top 20 content items across all clients and displaying them. We modified this query and added post-fetch filtering: clients now only see metrics for items belonging to their own projects.
 
 ### 2. Client Data Access Restoration (Database Joins)
-- **Problem:** Clients were seeing empty lists for tasks, calendar events, notes, and transactions because the backend queries was missing the `clientId` attribute on project selections, which caused in-memory security filters to fail.
+- **Problem:** Clients were seeing empty lists for tasks, calendar events, notes, and transactions because the backend queries were missing the `clientId` attribute on project selections, which caused in-memory security filters to fail.
 - **Fix:** Added `clientId` to the project join parameters in `TASK_SELECT`, `EVENT_SELECT`, `NOTE_SELECT`, and `TRANSACTION_SELECT`. Clients can now view their projects' tasks, notes, events, and transactions successfully.
 
 ### 3. Active Clients Sidebar Video Tracker
@@ -43,9 +44,17 @@ _Date: May 2026_
 - **Problem:** A mismatch on the Finance page button variant (`variant="outline"`) was causing the TypeScript compiler to fail because the Button component only supports `primary`, `secondary`, `ghost`, and `danger`.
 - **Fix:** Updated the button variant to `variant="secondary"`, resolving all TypeScript errors and enabling a successful production build.
 
+### 8. Dynamic Loan Repayment Tracking
+- **Requirement:** When adding a repayment transaction (expense), it should reduce the outstanding balance of the respective loan and let the user select which loan was paid.
+- **Fix:**
+  - Added a `loanId` relation in `prisma/schema.prisma` linking `Transaction` and `Loan` tables, and synchronized both local and production databases.
+  - Allowed linking `EXPENSE` transactions directly to a `Loan` via a new dropdown option in the Transaction modal.
+  - Created a dynamic calculator in GET `/api/loans` that aggregates all expense repayments for each loan and returns the correct `repaid_amount` and `remaining_amount` (outstanding balance).
+  - Configured the Loans Tab to show Borrowed, Paid Back, and Owed (Remaining) columns. Added a "Repay" button next to pending loans to quickly log repayments with pre-filled inputs.
+
 ---
 
 ## 🚦 Status Summary
 - **Typecheck Status:** ✅ Passed (`npx tsc --noEmit` runs with 0 errors)
 - **Production Build Status:** ✅ Passed (`npm run build` compiles successfully)
-- **Git Security Cleanup:** ✅ Completed and staged
+- **Git Security Cleanup:** ✅ Completed and committed
