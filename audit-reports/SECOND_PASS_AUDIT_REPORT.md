@@ -9,7 +9,9 @@ _Date: May 2026_
 > 1. Ensuring complete data isolation for client accounts so clients can only see their own metrics, posts, tasks, and notes (and never anyone else's).
 > 2. Resolving key bugs reported with the overview page, reels, dates, and navigation buttons.
 > 3. Introducing dynamic loan repayment tracking so repayments automatically reduce outstanding balances.
-> 4. Resolving compilation issues to ensure a clean, production-ready build.
+> 4. Resolving a client-side infinite loop (buffering issue) on the Finance Page.
+> 5. Synchronizing the repayment calculations across all dashboard pages (Overview & Analytics Tab).
+> 6. Resolving compilation issues to ensure a clean, production-ready build.
 
 ---
 
@@ -52,9 +54,17 @@ _Date: May 2026_
   - Created a dynamic calculator in GET `/api/loans` that aggregates all expense repayments for each loan and returns the correct `repaid_amount` and `remaining_amount` (outstanding balance).
   - Configured the Loans Tab to show Borrowed, Paid Back, and Owed (Remaining) columns. Added a "Repay" button next to pending loans to quickly log repayments with pre-filled inputs.
 
+### 9. Decoupling Rendering Loop (Buffering Issue Resolve)
+- **Problem:** An inline function declared as a prop in the parent component was changing its reference on every render, causing the Loans Tab to re-fetch the `/api/loans` API in an infinite loop, showing a persistent "Loading..." buffering state.
+- **Fix:** Decoupled `onRefresh` from the initial mount fetch callback in `LoansTab` and wrapped the parent callbacks in stable `useCallback` hooks, eliminating the infinite render loop.
+
+### 10. Platform-Wide Repayments Synchronization
+- **Problem:** The "Pending Loans" KPI and lists on the Overview page and the Finance Analytics tab were only reading the original, raw loan amount, displaying incorrect totals that did not factor in partial repayments.
+- **Fix:** Updated the Overview Page ([page.tsx](file:///e:/chrome%20downloads%20%5D/taha-os-clean/taha-os-clean/src/app/(dashboard)/overview/page.tsx)) and the Finance Analytics Tab ([AnalyticsTab.tsx](file:///e:/chrome%20downloads%20%5D/taha-os-clean/taha-os-clean/src/components/finance/AnalyticsTab.tsx)) queries to fetch linked transaction repayments and calculate the remaining pending totals dynamically.
+
 ---
 
 ## 🚦 Status Summary
 - **Typecheck Status:** ✅ Passed (`npx tsc --noEmit` runs with 0 errors)
 - **Production Build Status:** ✅ Passed (`npm run build` compiles successfully)
-- **Git Security Cleanup:** ✅ Completed and committed
+- **Git Security Cleanup & Deployment:** ✅ Fully completed and deployed to Vercel production
