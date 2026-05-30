@@ -21,6 +21,8 @@ interface Loan {
   status: 'PENDING' | 'PAID'
   due_date: string | null
   notes: string | null
+  repaid_amount?: number
+  remaining_amount?: number
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -274,9 +276,9 @@ export function AnalyticsTab() {
   }, [])
 
   // Loan stats
-  const loanPending = useMemo(() => loans.filter((l) => l.status === 'PENDING').reduce((s, l) => s + Number(l.amount), 0), [loans])
-  const loanPaid    = useMemo(() => loans.filter((l) => l.status === 'PAID').reduce((s, l) => s + Number(l.amount), 0), [loans])
-  const loanTotal   = loanPending + loanPaid
+  const loanPending = useMemo(() => loans.reduce((s, l) => s + (l.remaining_amount ?? (l.status === 'PENDING' ? Number(l.amount) : 0)), 0), [loans])
+  const loanPaid    = useMemo(() => loans.reduce((s, l) => s + (l.repaid_amount ?? (l.status === 'PAID' ? Number(l.amount) : 0)), 0), [loans])
+  const loanTotal   = loans.reduce((s, l) => s + Number(l.amount), 0)
 
   const months = useMemo(() => getLast6Months(), [])
 
@@ -548,7 +550,14 @@ export function AnalyticsTab() {
                     {loan.notes && <p className="text-[10px] text-stone-400 truncate mt-0.5">{loan.notes}</p>}
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-bold text-stone-900">{formatMoney(Number(loan.amount))}</p>
+                    <p className="text-sm font-bold text-stone-900">
+                      {formatMoney(loan.remaining_amount ?? (loan.status === 'PAID' ? 0 : Number(loan.amount)))}
+                    </p>
+                    {loan.repaid_amount !== undefined && loan.repaid_amount > 0 && (
+                      <p className="text-[9px] text-stone-400">
+                        Paid: {formatMoney(loan.repaid_amount)}
+                      </p>
+                    )}
                     <span className={`text-[9px] font-bold uppercase tracking-wide ${
                       isOverdue ? 'text-red-500' : isPending ? 'text-orange-500' : 'text-emerald-600'
                     }`}>
