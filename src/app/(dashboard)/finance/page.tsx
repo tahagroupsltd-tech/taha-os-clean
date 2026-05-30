@@ -215,7 +215,7 @@ export default function FinancePage() {
     }
   }
 
-  const handleLogRepayment = (loanId: string, loanTitle: string, remainingAmount: number) => {
+  const handleLogRepayment = useCallback((loanId: string, loanTitle: string, remainingAmount: number) => {
     setEditing(null)
     setForm({
       title: `Repayment: ${loanTitle}`,
@@ -229,7 +229,12 @@ export default function FinancePage() {
     })
     setModalOpen(true)
     setActiveTab('transactions')
-  }
+  }, [])
+
+  const handleLoansRefresh = useCallback(() => {
+    fetchPendingLoans()
+    fetchLoansList()
+  }, [fetchPendingLoans, fetchLoansList])
 
   // Block non-founder access at the page level too (not just at the API)
   if (user && !isFounder) {
@@ -539,10 +544,7 @@ export default function FinancePage() {
             editing={editingLoan}
             setEditing={setEditingLoan}
             onLogRepayment={handleLogRepayment}
-            onRefresh={() => {
-              fetchPendingLoans()
-              fetchLoansList()
-            }}
+            onRefresh={handleLoansRefresh}
           />
         )}
         {activeTab === 'receivables' && (
@@ -1048,14 +1050,13 @@ function LoansTab({
       if (res.ok) {
         setLoans(json.data ?? [])
         if (json.summary) setSummary(json.summary)
-        if (onRefresh) onRefresh()
       }
     } catch (err) {
       console.error('Error fetching loans:', err)
     } finally {
       setLoading(false)
     }
-  }, [onRefresh])
+  }, [])
 
   useEffect(() => {
     fetchLoans()
@@ -1105,6 +1106,7 @@ function LoansTab({
       setModalOpen(false)
       setEditing(null)
       fetchLoans()
+      if (onRefresh) onRefresh()
     } catch (err: any) {
       toast.error(err.message)
     } finally {
@@ -1119,6 +1121,7 @@ function LoansTab({
       if (res.ok) {
         toast.success('Deleted')
         fetchLoans()
+        if (onRefresh) onRefresh()
       } else {
         toast.error('Failed to delete loan')
       }
@@ -1138,6 +1141,7 @@ function LoansTab({
       if (res.ok) {
         toast.success(`Loan marked as ${nextStatus}`)
         fetchLoans()
+        if (onRefresh) onRefresh()
       } else {
         toast.error('Failed to update status')
       }
