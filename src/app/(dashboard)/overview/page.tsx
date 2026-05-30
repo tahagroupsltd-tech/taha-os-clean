@@ -80,6 +80,7 @@ async function getStats(userId: string, role: string) {
     totalTasks, todoTasks, recentTasks, recentContent, upcomingEvents,
     totalContent, totalProjects, activeProjects,
     loans,
+    repayments,
   ] = await Promise.all([
     safe(() => sbCount('tasks', taskFilters), 0),
     safe(() => sbCount('tasks', { ...taskFilters, status: 'eq.TODO' }), 0),
@@ -102,7 +103,10 @@ async function getStats(userId: string, role: string) {
     safe(() => sbCount('projects', projectFilters), 0),
     safe(() => sbCount('projects', { ...projectFilters, status: 'eq.ACTIVE' }), 0),
     canSeeFinance
-      ? safe(() => sbSelect('loans', { select: 'amount,status', filters: { status: 'eq.PENDING' } }), [] as any[])
+      ? safe(() => sbSelect('loans', { select: 'id,amount,status', filters: { status: 'eq.PENDING' } }), [] as any[])
+      : Promise.resolve([] as any[]),
+    canSeeFinance
+      ? safe(() => sbSelect('transactions', { select: 'amount,loanId,type', filters: { loanId: 'not.is.null' } }), [] as any[])
       : Promise.resolve([] as any[]),
   ])
 
@@ -289,7 +293,20 @@ async function getStats(userId: string, role: string) {
     }
   }
 
-  const pendingLoans = loans.reduce((acc: number, item: any) => acc + (parseFloat(item.amount) || 0), 0)
+  let pendingLoans = 0
+  if (canSeeFinance) {
+    const repaymentsMap: Record<string, number> = {}
+    for (const r of repayments) {
+      if (r.type === 'EXPENSE' && r.loanId) {
+        repaymentsMap[r.loanId] = (repaymentsMap[r.loanId] || 0) + (parseFloat(r.amount) || 0)
+      }
+    }
+    for (const l of loans) {
+      const amt = parseFloat(l.amount) || 0
+      const repaid = repaymentsMap[l.id] || 0
+      pendingLoans += Math.max(0, amt - repaid)
+    }
+  }
 
   // --- 60% completion check for SOP Level 4 scripting follow-up ---
   const pendingScriptingAlerts: { id: string; name: string; posted: number; total: number; pct: number }[] = []
