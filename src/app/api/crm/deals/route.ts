@@ -7,7 +7,7 @@ const canViewCRM = (role: string) => role === 'ADMIN' || role === 'MANAGER'
 
 export const dynamic = 'force-dynamic'
 
-const DEAL_SELECT = '*,lead:crm_leads!lead_id(id,title),contact:crm_contacts!contact_id(id,name),company:crm_companies!company_id(id,name),project:projects!project_id(id,name),assignedTo:users!assigned_to_id(id,name)'
+const DEAL_SELECT = '*,lead:crm_leads!leadId(id,title),contact:crm_contacts!contactId(id,name),company:crm_companies!companyId(id,name),project:projects!projectId(id,name),assignedTo:users!assignedToId(id,name)'
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const deals = await sbSelect('crm_deals', {
       select: DEAL_SELECT,
       filters: {},
-      order: 'updated_at.desc',
+      order: 'updatedAt.desc',
     })
 
     return NextResponse.json({ data: deals })
@@ -45,16 +45,16 @@ export async function POST(req: NextRequest) {
       value: value ? Number(value) : null,
       stage: stage ?? 'PROPOSAL',
       probability: probability ?? 50,
-      close_date: closeDate ? new Date(closeDate).toISOString() : null,
-      lead_id: leadId || null,
-      contact_id: contactId || null,
-      company_id: companyId || null,
-      project_id: projectId || null,
-      assigned_to_id: assignedToId || null,
+      closeDate: closeDate ? new Date(closeDate).toISOString() : null,
+      leadId: leadId || null,
+      contactId: contactId || null,
+      companyId: companyId || null,
+      projectId: projectId || null,
+      assignedToId: assignedToId || null,
       notes: notes || null,
-      created_by_id: user.id,
-      created_at: now,
-      updated_at: now,
+      createdById: user.id,
+      createdAt: now,
+      updatedAt: now,
     })
 
     const full = await sbFindOne('crm_deals', {

@@ -833,6 +833,48 @@ export default async function OverviewPage() {
           )}
         </div>
 
+        {/* Document Generator launcher row */}
+        {!isClient && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* LEFT — Document Generator */}
+            <div className="bg-white rounded-lg border border-stone-100">
+              <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+                <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide">Document Generator</p>
+                <Link
+                  href="/documents"
+                  className="text-[10px] font-semibold text-white bg-stone-800 hover:bg-stone-900 px-3 py-1.5 rounded transition-colors"
+                >
+                  Open →
+                </Link>
+              </div>
+              <div className="p-4 space-y-2.5">
+                <p className="text-[11px] text-stone-400 leading-snug">
+                  Generate professional onboarding documents, MOUs, and MOAs for Taha Media clients in seconds.
+                </p>
+                <div className="space-y-2 pt-1">
+                  {[
+                    { label: 'Client Onboarding', desc: 'Client info · Services · Banking details', color: 'bg-blue-50 text-blue-700 border-blue-100' },
+                    { label: 'MOU', desc: 'Party details · Scope & goals · Terms', color: 'bg-violet-50 text-violet-700 border-violet-100' },
+                    { label: 'MOA', desc: 'Party details · Obligations · Duration', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+                  ].map((doc) => (
+                    <Link
+                      key={doc.label}
+                      href="/documents"
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg border hover:opacity-80 transition-opacity"
+                      style={{}}
+                    >
+                      <div className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${doc.color} flex-shrink-0`}>
+                        {doc.label}
+                      </div>
+                      <p className="text-[10px] text-stone-400 truncate">{doc.desc}</p>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Engagement Metrics */}
         {stats.topMetrics.length > 0 && (
           <div className="bg-white rounded-lg border border-stone-100">

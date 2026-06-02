@@ -5,7 +5,7 @@ import { sbUpdate, sbDelete, sbFindOne } from '@/lib/supa'
 
 export const dynamic = 'force-dynamic'
 
-const DEAL_SELECT = '*,lead:crm_leads!lead_id(id,title),contact:crm_contacts!contact_id(id,name),company:crm_companies!company_id(id,name),project:projects!project_id(id,name),assignedTo:users!assigned_to_id(id,name)'
+const DEAL_SELECT = '*,lead:crm_leads!leadId(id,title),contact:crm_contacts!contactId(id,name),company:crm_companies!companyId(id,name),project:projects!projectId(id,name),assignedTo:users!assignedToId(id,name)'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -19,12 +19,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (body.value !== undefined) patch.value = body.value ? Number(body.value) : null
     if (body.stage !== undefined) patch.stage = body.stage
     if (body.probability !== undefined) patch.probability = body.probability
-    if (body.closeDate !== undefined) patch.close_date = body.closeDate ? new Date(body.closeDate).toISOString() : null
-    if (body.leadId !== undefined) patch.lead_id = body.leadId || null
-    if (body.contactId !== undefined) patch.contact_id = body.contactId || null
-    if (body.companyId !== undefined) patch.company_id = body.companyId || null
-    if (body.projectId !== undefined) patch.project_id = body.projectId || null
-    if (body.assignedToId !== undefined) patch.assigned_to_id = body.assignedToId || null
+    if (body.closeDate !== undefined) patch.closeDate = body.closeDate ? new Date(body.closeDate).toISOString() : null
+    if (body.leadId !== undefined) patch.leadId = body.leadId || null
+    if (body.contactId !== undefined) patch.contactId = body.contactId || null
+    if (body.companyId !== undefined) patch.companyId = body.companyId || null
+    if (body.projectId !== undefined) patch.projectId = body.projectId || null
+    if (body.assignedToId !== undefined) patch.assignedToId = body.assignedToId || null
     if (body.notes !== undefined) patch.notes = body.notes || null
 
     await sbUpdate('crm_deals', { id: `eq.${params.id}` }, patch)

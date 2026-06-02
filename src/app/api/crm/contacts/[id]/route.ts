@@ -5,7 +5,7 @@ import { sbUpdate, sbDelete, sbFindOne } from '@/lib/supa'
 
 export const dynamic = 'force-dynamic'
 
-const CONTACT_SELECT = '*,company:crm_companies!company_id(id,name)'
+const CONTACT_SELECT = '*,company:crm_companies!companyId(id,name),leads:crm_leads!contactId(id,title,stage)'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -19,7 +19,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (body.email !== undefined) patch.email = body.email || null
     if (body.phone !== undefined) patch.phone = body.phone || null
     if (body.position !== undefined) patch.position = body.position || null
-    if (body.companyId !== undefined) patch.company_id = body.companyId || null
+    if (body.companyId !== undefined) patch.companyId = body.companyId || null
     if (body.notes !== undefined) patch.notes = body.notes || null
 
     await sbUpdate('crm_contacts', { id: `eq.${params.id}` }, patch)

@@ -5,7 +5,7 @@ import { sbUpdate, sbDelete, sbFindOne } from '@/lib/supa'
 
 export const dynamic = 'force-dynamic'
 
-const LEAD_SELECT = '*,contact:crm_contacts!contact_id(id,name,email,phone),company:crm_companies!company_id(id,name),assignedTo:users!assigned_to_id(id,name),project:projects!project_id(id,name)'
+const LEAD_SELECT = '*,contact:crm_contacts!contactId(id,name,email,phone),company:crm_companies!companyId(id,name),assignedTo:users!assignedToId(id,name),project:projects!projectId(id,name)'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -19,10 +19,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (body.stage !== undefined) patch.stage = body.stage
     if (body.source !== undefined) patch.source = body.source
     if (body.value !== undefined) patch.value = body.value ? Number(body.value) : null
-    if (body.contactId !== undefined) patch.contact_id = body.contactId || null
-    if (body.companyId !== undefined) patch.company_id = body.companyId || null
-    if (body.assignedToId !== undefined) patch.assigned_to_id = body.assignedToId || null
-    if (body.projectId !== undefined) patch.project_id = body.projectId || null
+    if (body.contactId !== undefined) patch.contactId = body.contactId || null
+    if (body.companyId !== undefined) patch.companyId = body.companyId || null
+    if (body.assignedToId !== undefined) patch.assignedToId = body.assignedToId || null
+    if (body.projectId !== undefined) patch.projectId = body.projectId || null
     if (body.notes !== undefined) patch.notes = body.notes || null
     if (body.niche !== undefined) patch.niche = body.niche || null
     if (body.phone !== undefined) patch.phone = body.phone || null
@@ -32,7 +32,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (body.website_url !== undefined) patch.website_url = body.website_url || null
     if (body.other_links !== undefined) patch.other_links = body.other_links || null
     if (body.expectedCloseDate !== undefined) {
-      patch.expected_close_date = body.expectedCloseDate ? new Date(body.expectedCloseDate).toISOString() : null
+      patch.expectedCloseDate = body.expectedCloseDate ? new Date(body.expectedCloseDate).toISOString() : null
     }
 
     await sbUpdate('crm_leads', { id: `eq.${params.id}` }, patch)

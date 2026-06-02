@@ -7,6 +7,7 @@ import {
   Users, Settings, LogOut, Menu, X,
   Calendar, StickyNote, Wallet, ClipboardList, IndianRupee, CalendarRange,
   TrendingUp, UserCircle, Target, ChevronDown, ChevronRight, BookMarked, Sparkles,
+  FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { href: '/team',      label: 'Team',           icon: Users,           roles: ['ADMIN','MANAGER'],                     color: 'text-teal-400'   },
   { href: '/sop',       label: 'SOP Pipeline',   icon: BookMarked,      roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR'],          color: 'text-amber-400'  },
   { href: '/ai-tools',  label: 'AI Tools',       icon: Sparkles,        roles: ['ADMIN','MANAGER'],                     color: 'text-purple-400' },
+  { href: '/documents', label: 'Documents',      icon: FileText,        roles: ['ADMIN','MANAGER'],                     color: 'text-amber-400'  },
   { href: '/settings',  label: 'Settings',       icon: Settings,        roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-slate-400'  },
 ]
 

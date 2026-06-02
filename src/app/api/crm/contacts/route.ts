@@ -7,7 +7,7 @@ const canViewCRM = (role: string) => role === 'ADMIN' || role === 'MANAGER'
 
 export const dynamic = 'force-dynamic'
 
-const CONTACT_SELECT = '*,company:crm_companies!company_id(id,name)'
+const CONTACT_SELECT = '*,company:crm_companies!companyId(id,name),leads:crm_leads!contactId(id,title,stage)'
 
 export async function GET(req: NextRequest) {
   try {
@@ -45,11 +45,11 @@ export async function POST(req: NextRequest) {
       email: email || null,
       phone: phone || null,
       position: position || null,
-      company_id: companyId || null,
+      companyId: companyId || null,
       notes: notes || null,
-      created_by_id: user.id,
-      created_at: now,
-      updated_at: now,
+      createdById: user.id,
+      createdAt: now,
+      updatedAt: now,
     })
 
     const full = await sbFindOne('crm_contacts', {

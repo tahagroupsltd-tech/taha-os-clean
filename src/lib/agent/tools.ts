@@ -697,9 +697,9 @@ export async function runTool(
         const filters: Record<string, string> = {}
         if (args.stage) filters.stage = `eq.${args.stage}`
         let leads = await sbSelect('crm_leads', {
-          select: 'id,title,stage,source,value,updated_at,contact:crm_contacts!contact_id(id,name),company:crm_companies!company_id(id,name),assignedTo:users!assigned_to_id(id,name)',
+          select: 'id,title,stage,source,value,updatedAt,contact:crm_contacts!contactId(id,name),company:crm_companies!companyId(id,name),assignedTo:users!assignedToId(id,name)',
           filters,
-          order: 'updated_at.desc',
+          order: 'updatedAt.desc',
           limit: 25,
         })
         if (args.query) {
@@ -718,14 +718,14 @@ export async function runTool(
           source: args.source ?? 'OTHER',
           value: args.value ? Number(args.value) : null,
           notes: args.notes || null,
-          contact_id: args.contactId || null,
-          company_id: args.companyId || null,
-          assigned_to_id: args.assignedToId || null,
-          project_id: args.projectId || null,
-          expected_close_date: args.expectedCloseDate ? new Date(args.expectedCloseDate).toISOString() : null,
-          created_by_id: user.id,
-          created_at: now,
-          updated_at: now,
+          contactId: args.contactId || null,
+          companyId: args.companyId || null,
+          assignedToId: args.assignedToId || null,
+          projectId: args.projectId || null,
+          expectedCloseDate: args.expectedCloseDate ? new Date(args.expectedCloseDate).toISOString() : null,
+          createdById: user.id,
+          createdAt: now,
+          updatedAt: now,
         })
         return { ok: true, data: { id: lead.id, title: lead.title, stage: lead.stage } }
       }
@@ -741,7 +741,7 @@ export async function runTool(
       // ── CRM: list_contacts ─────────────────────
       case 'list_contacts': {
         let contacts = await sbSelect('crm_contacts', {
-          select: 'id,name,email,phone,position,company:crm_companies!company_id(id,name)',
+          select: 'id,name,email,phone,position,company:crm_companies!companyId(id,name)',
           filters: {},
           order: 'name.asc',
           limit: 25,
@@ -763,11 +763,11 @@ export async function runTool(
           email: args.email || null,
           phone: args.phone || null,
           position: args.position || null,
-          company_id: args.companyId || null,
+          companyId: args.companyId || null,
           notes: args.notes || null,
-          created_by_id: user.id,
-          created_at: now,
-          updated_at: now,
+          createdById: user.id,
+          createdAt: now,
+          updatedAt: now,
         })
         return { ok: true, data: { id: contact.id, name: contact.name } }
       }
@@ -796,9 +796,9 @@ export async function runTool(
           website: args.website || null,
           address: args.address || null,
           notes: args.notes || null,
-          created_by_id: user.id,
-          created_at: now,
-          updated_at: now,
+          createdById: user.id,
+          createdAt: now,
+          updatedAt: now,
         })
         return { ok: true, data: { id: company.id, name: company.name } }
       }
@@ -808,9 +808,9 @@ export async function runTool(
         const filters: Record<string, string> = {}
         if (args.stage) filters.stage = `eq.${args.stage}`
         let deals = await sbSelect('crm_deals', {
-          select: 'id,title,stage,value,probability,close_date,contact:crm_contacts!contact_id(id,name),company:crm_companies!company_id(id,name),assignedTo:users!assigned_to_id(id,name)',
+          select: 'id,title,stage,value,probability,closeDate,contact:crm_contacts!contactId(id,name),company:crm_companies!companyId(id,name),assignedTo:users!assignedToId(id,name)',
           filters,
-          order: 'updated_at.desc',
+          order: 'updatedAt.desc',
           limit: 25,
         })
         if (args.query) {
@@ -828,16 +828,16 @@ export async function runTool(
           value: args.value ? Number(args.value) : null,
           stage: args.stage ?? 'PROPOSAL',
           probability: args.probability ?? 50,
-          close_date: args.closeDate ? new Date(args.closeDate).toISOString() : null,
-          lead_id: args.leadId || null,
-          contact_id: args.contactId || null,
-          company_id: args.companyId || null,
-          project_id: args.projectId || null,
-          assigned_to_id: args.assignedToId || null,
+          closeDate: args.closeDate ? new Date(args.closeDate).toISOString() : null,
+          leadId: args.leadId || null,
+          contactId: args.contactId || null,
+          companyId: args.companyId || null,
+          projectId: args.projectId || null,
+          assignedToId: args.assignedToId || null,
           notes: args.notes || null,
-          created_by_id: user.id,
-          created_at: now,
-          updated_at: now,
+          createdById: user.id,
+          createdAt: now,
+          updatedAt: now,
         })
         return { ok: true, data: { id: deal.id, title: deal.title, stage: deal.stage } }
       }

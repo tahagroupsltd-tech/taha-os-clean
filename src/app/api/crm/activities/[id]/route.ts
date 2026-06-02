@@ -16,7 +16,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (body.type !== undefined) patch.type = body.type
     if (body.subject !== undefined) patch.subject = body.subject
     if (body.description !== undefined) patch.description = body.description || null
-    if (body.dueDate !== undefined) patch.due_date = body.dueDate ? new Date(body.dueDate).toISOString() : null
+    if (body.dueDate !== undefined) patch.dueDate = body.dueDate ? new Date(body.dueDate).toISOString() : null
     if (body.completed !== undefined) patch.completed = body.completed
 
     await sbUpdate('crm_activities', { id: `eq.${params.id}` }, patch)

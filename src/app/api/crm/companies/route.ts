@@ -20,9 +20,9 @@ export async function GET(req: NextRequest) {
     const withCounts = await Promise.all(
       companies.map(async (c: any) => {
         const [contacts, leads, deals] = await Promise.all([
-          sbCount('crm_contacts', { company_id: `eq.${c.id}` }),
-          sbCount('crm_leads', { company_id: `eq.${c.id}` }),
-          sbCount('crm_deals', { company_id: `eq.${c.id}` }),
+          sbCount('crm_contacts', { companyId: `eq.${c.id}` }),
+          sbCount('crm_leads', { companyId: `eq.${c.id}` }),
+          sbCount('crm_deals', { companyId: `eq.${c.id}` }),
         ])
         return { ...c, _count: { contacts, leads, deals } }
       })
@@ -52,9 +52,9 @@ export async function POST(req: NextRequest) {
       website: website || null,
       address: address || null,
       notes: notes || null,
-      created_by_id: user.id,
-      created_at: now,
-      updated_at: now,
+      createdById: user.id,
+      createdAt: now,
+      updatedAt: now,
     })
 
     return NextResponse.json({ data: { ...company, _count: { contacts: 0, leads: 0, deals: 0 } } }, { status: 201 })

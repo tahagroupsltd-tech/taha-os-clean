@@ -7,7 +7,7 @@ const canViewCRM = (role: string) => role === 'ADMIN' || role === 'MANAGER'
 
 export const dynamic = 'force-dynamic'
 
-const ACTIVITY_SELECT = '*,createdBy:users!created_by_id(id,name),lead:crm_leads!lead_id(id,title),deal:crm_deals!deal_id(id,title),contact:crm_contacts!contact_id(id,name)'
+const ACTIVITY_SELECT = '*,createdBy:users!createdById(id,name),lead:crm_leads!leadId(id,title),deal:crm_deals!dealId(id,title),contact:crm_contacts!contactId(id,name)'
 
 export async function GET(req: NextRequest) {
   try {
@@ -21,14 +21,14 @@ export async function GET(req: NextRequest) {
     const contactId = searchParams.get('contactId')
 
     const filters: Record<string, string> = {}
-    if (leadId) filters.lead_id = `eq.${leadId}`
-    if (dealId) filters.deal_id = `eq.${dealId}`
-    if (contactId) filters.contact_id = `eq.${contactId}`
+    if (leadId) filters.leadId = `eq.${leadId}`
+    if (dealId) filters.dealId = `eq.${dealId}`
+    if (contactId) filters.contactId = `eq.${contactId}`
 
     const activities = await sbSelect('crm_activities', {
       select: ACTIVITY_SELECT,
       filters,
-      order: 'created_at.desc',
+      order: 'createdAt.desc',
     })
 
     return NextResponse.json({ data: activities })
@@ -54,14 +54,14 @@ export async function POST(req: NextRequest) {
       type: type ?? 'NOTE',
       subject,
       description: description || null,
-      due_date: dueDate ? new Date(dueDate).toISOString() : null,
-      lead_id: leadId || null,
-      deal_id: dealId || null,
-      contact_id: contactId || null,
+      dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+      leadId: leadId || null,
+      dealId: dealId || null,
+      contactId: contactId || null,
       completed: false,
-      created_by_id: user.id,
-      created_at: now,
-      updated_at: now,
+      createdById: user.id,
+      createdAt: now,
+      updatedAt: now,
     })
 
     const full = await sbFindOne('crm_activities', {
