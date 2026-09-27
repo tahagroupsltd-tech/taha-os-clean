@@ -47,9 +47,16 @@ export async function middleware(req: NextRequest) {
 
   // Verify JWT is valid (not expired, not tampered)
   try {
-    const secret = new TextEncoder().encode(
-      process.env.JWT_SECRET ?? 'taha-media-dev-only-secret-change-in-production-min-32-chars'
-    )
+    const jwtSecret = process.env.JWT_SECRET
+    if (!jwtSecret) {
+      // In production, never fall back to a known dev secret — that would allow session forgery
+      console.error('[middleware] CRITICAL: JWT_SECRET is not set. Set it in Vercel → Environment Variables.')
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
+      }
+      return NextResponse.redirect(new URL('/login', req.url))
+    }
+    const secret = new TextEncoder().encode(jwtSecret)
     await jwtVerify(token, secret)
     return NextResponse.next()
   } catch {

@@ -40,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const body = await req.json()
   const patch: Record<string, any> = { updated_at: nowTs() }
 
-  const allowed = ['status', 'due_date', 'notes', 'client_id', 'project_id', 'scope_of_work', 'client_location', 'important_details']
+  const allowed = ['status', 'due_date', 'notes', 'client_id', 'project_id', 'scope_of_work', 'client_location', 'important_details', 'invoice_number', 'created_at']
   for (const k of allowed) {
     if (body[k] !== undefined) patch[k] = body[k] ?? null
   }

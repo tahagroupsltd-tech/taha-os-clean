@@ -7,13 +7,12 @@ const SB_URL = process.env.SUPABASE_URL
   ? `${process.env.SUPABASE_URL}/rest/v1`
   : 'https://zmhmxfndzrrdmvvqblkx.supabase.co/rest/v1'
 
-// SECURITY: Never hardcode this key. Set SUPABASE_ANON_KEY in Vercel env vars.
-// Fallback keeps the app working during the transition — remove once env var is set.
-const SB_KEY = process.env.SUPABASE_ANON_KEY ??
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptaG14Zm5kenJyZG12dnFibGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMDMzMzksImV4cCI6MjA5MjY3OTMzOX0.1i4olAULwrRO7wAP1Hpwur9Jl0SxieAn7dP5BaeyY9E'
+// SECURITY: This key MUST be set via environment variable.
+// Set SUPABASE_ANON_KEY in Vercel → Project → Settings → Environment Variables.
+const SB_KEY = process.env.SUPABASE_ANON_KEY ?? ''
 
-if (!process.env.SUPABASE_ANON_KEY && process.env.NODE_ENV === 'production') {
-  console.error('[supa] WARNING: SUPABASE_ANON_KEY env var is not set — using hardcoded fallback. Set it in Vercel dashboard immediately.')
+if (!process.env.SUPABASE_ANON_KEY) {
+  console.error('[supa] CRITICAL: SUPABASE_ANON_KEY env var is not set. All database operations will fail. Set it in Vercel dashboard immediately.')
 }
 
 function hdrs(extra: Record<string, string> = {}) {

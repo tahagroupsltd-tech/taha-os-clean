@@ -7,7 +7,7 @@ import {
   Users, Settings, LogOut, Menu, X,
   Calendar, StickyNote, Wallet, ClipboardList, IndianRupee, CalendarRange,
   TrendingUp, UserCircle, Target, ChevronDown, ChevronRight, BookMarked, Sparkles,
-  FileText,
+  FileText, Receipt,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -24,6 +24,7 @@ const NAV_ITEMS = [
   { href: '/notes',     label: 'Notes',          icon: StickyNote,      roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR'],          color: 'text-yellow-400' },
   { href: '/finance',   label: 'Finance',        icon: Wallet,          roles: ['ADMIN'],                               color: 'text-green-400'  },
   { href: '/billing',   label: 'Client Billing', icon: IndianRupee,     roles: ['ADMIN'],                               color: 'text-emerald-400'},
+  { href: '/invoices',  label: 'Invoices',       icon: Receipt,         roles: ['ADMIN','MANAGER'],                     color: 'text-lime-400'   },
   { href: '/projects',  label: 'Projects',       icon: FolderKanban,    roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-indigo-400' },
   { href: '/reports',   label: 'Daily Reports',  icon: ClipboardList,   roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR'],          color: 'text-sky-400'    },
   { href: '/team',      label: 'Team',           icon: Users,           roles: ['ADMIN','MANAGER'],                     color: 'text-teal-400'   },

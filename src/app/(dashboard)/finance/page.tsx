@@ -1641,7 +1641,10 @@ function ReceivablesTab({
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-base font-bold text-green-700">{formatMoney(item.amount)}</span>
-                      <button onClick={() => handleDelete(item.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-400">
+                      <button onClick={() => { setEditing(item); setModalOpen(true) }} className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400">
+                        <Pencil size={13} />
+                      </button>
+                      <button onClick={() => handleDelete(item.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-stone-400 hover:text-red-500">
                         <Trash2 size={13} />
                       </button>
                     </div>
