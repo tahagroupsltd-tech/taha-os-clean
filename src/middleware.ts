@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
 
 // Routes that don't require auth
-const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/webhook', '/api/debug']
+const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/webhook']
 
 // Role-based page access (settings is open to all so anyone can change their own password)
 const ROLE_ACCESS: Record<string, string[]> = {

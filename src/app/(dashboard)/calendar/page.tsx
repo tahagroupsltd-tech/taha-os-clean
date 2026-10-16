@@ -412,7 +412,7 @@ export default function CalendarPage() {
 
       return true
     })
-  }, [events, tasks, contents, monthStart, monthEnd, typeFilter, projectFilter])
+  }, [events, tasks, contents, monthStart, monthEnd, typeFilter, projectFilter, user])
 
   // Group items by local YYYY-MM-DD key
   const itemsByDay = useMemo(() => {

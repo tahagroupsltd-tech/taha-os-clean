@@ -6,20 +6,19 @@ import { getServerUser } from '@/lib/auth'
 import { sbSelect, sbCount, TASK_SELECT, CONTENT_SELECT, EVENT_SELECT } from '@/lib/supa'
 import { Badge } from '@/components/ui/Badge'
 import {
-  taskStatusColor, taskPriorityColor,
-  contentStatusColor, formatDate, formatTime, formatMoney, isOverdue,
-  TASK_STATUS_LABELS, CONTENT_STATUS_LABELS, eventTypeColor, EVENT_TYPE_LABELS,
+  contentStatusColor, formatDate, formatTime, formatMoney,
+  CONTENT_STATUS_LABELS, eventTypeColor, EVENT_TYPE_LABELS,
 } from '@/lib/utils'
-import type { TaskStatus, ContentStatus, EventType } from '@/types'
+import type { ContentStatus, EventType } from '@/types'
 import {
   CheckSquare, FileVideo, FolderKanban, Users, AlertCircle,
   Calendar as CalendarIcon, IndianRupee, TrendingUp, TrendingDown,
-  BarChart2, Eye, Heart, MessageCircle, Share2,
-  Film, CheckCircle2,
+  BarChart2, Eye, Heart, MessageCircle,
+  Film, CheckCircle2, ArrowUpRight,
 } from 'lucide-react'
 import Link from 'next/link'
 import { ActiveTasksList } from './ActiveTasksList'
-import { OverviewTopBar } from './OverviewTopBar'
+import { TopBar } from '@/components/layout/TopBar'
 
 async function getStats(userId: string, role: string) {
   const isAdmin = role === 'ADMIN'
@@ -42,7 +41,7 @@ async function getStats(userId: string, role: string) {
     try { return await fn() } catch (e) { console.error('[overview] query failed:', e); return fallback }
   }
 
-  // For CLIENT: get their project IDs first so we can filter tasks properly
+  // For CLIENT: get their project IDs first
   let clientProjectIds: string[] = []
   if (role === 'CLIENT') {
     try {
@@ -51,26 +50,16 @@ async function getStats(userId: string, role: string) {
     } catch { /* ignore */ }
   }
 
-  // Build task filter: clients see tasks on THEIR projects only; employees see only their own tasks
   const taskFilters: Record<string, string> = {}
   if (isEmployee) taskFilters.assignedToId = `eq.${userId}`
   if (role === 'CLIENT') {
-    if (clientProjectIds.length > 0) {
-      taskFilters.projectId = `in.(${clientProjectIds.join(',')})`
-    } else {
-      // No projects → return no tasks
-      taskFilters.projectId = 'eq.none'
-    }
+    taskFilters.projectId = clientProjectIds.length > 0 ? `in.(${clientProjectIds.join(',')})` : 'eq.none'
   }
 
   const contentFilters: Record<string, string> = {}
   if (isEmployee) contentFilters.assigneeId = `eq.${userId}`
   if (role === 'CLIENT') {
-    if (clientProjectIds.length > 0) {
-      contentFilters.projectId = `in.(${clientProjectIds.join(',')})`
-    } else {
-      contentFilters.projectId = 'eq.none'
-    }
+    contentFilters.projectId = clientProjectIds.length > 0 ? `in.(${clientProjectIds.join(',')})` : 'eq.none'
   }
 
   const projectFilters: Record<string, string> = {}
@@ -79,8 +68,7 @@ async function getStats(userId: string, role: string) {
   const [
     totalTasks, todoTasks, recentTasks, recentContent, upcomingEvents,
     totalContent, totalProjects, activeProjects,
-    loans,
-    repayments,
+    loans, repayments,
   ] = await Promise.all([
     safe(() => sbCount('tasks', taskFilters), 0),
     safe(() => sbCount('tasks', { ...taskFilters, status: 'eq.TODO' }), 0),
@@ -110,67 +98,39 @@ async function getStats(userId: string, role: string) {
       : Promise.resolve([] as any[]),
   ])
 
-  // Filter urgent/overdue in-memory
-  const urgentTasks = (recentTasks as any[]).filter(
-    (t: any) => t.priority === 'URGENT' && t.status !== 'DONE'
-  ).length
-  const overdueTasks = (recentTasks as any[]).filter(
-    (t: any) => t.status !== 'DONE' && t.deadline && new Date(t.deadline) < now
-  ).length
+  const urgentTasks = (recentTasks as any[]).filter((t: any) => t.priority === 'URGENT' && t.status !== 'DONE').length
+  const overdueTasks = (recentTasks as any[]).filter((t: any) => t.status !== 'DONE' && t.deadline && new Date(t.deadline) < now).length
 
-  const editingContent = (recentContent as any[]).filter((c: any) => c.status === 'EDITING').length
-
-  // Filter upcoming events for this week
   const filteredEvents = (upcomingEvents as any[]).filter((e: any) => {
     const st = new Date(e.startTime)
     return st >= startOfDay && st <= endOfWeek
   }).slice(0, 5)
 
-  // recentContent is already scoped by contentFilters (projectId filter for CLIENT)
   const filteredContent = recentContent as any[]
 
-  // Client content timeline: this-month stats
+  // Client content timeline
   let clientMonthTimeline: {
-    total: number
-    posted: number
-    firstPosted: any | null
-    lastPosted: any | null
-    nextUpcoming: any | null
-    lastOfMonth: any | null
-    needsReview: number
-    items: any[]
+    total: number; posted: number; firstPosted: any | null; lastPosted: any | null
+    nextUpcoming: any | null; lastOfMonth: any | null; needsReview: number; items: any[]
   } | null = null
 
   if (role === 'CLIENT' && filteredContent.length > 0) {
     const tNow = new Date()
     const tY = tNow.getFullYear(), tM = tNow.getMonth()
-
-    const isVid = (c: any) =>
-      !c.type || ['REEL','VIDEO','SHORT','YOUTUBE'].includes((c.type ?? '').toUpperCase())
+    const isVid = (c: any) => !c.type || ['REEL','VIDEO','SHORT','YOUTUBE'].includes((c.type ?? '').toUpperCase())
 
     const monthAll = filteredContent.filter((c: any) => {
       if (!c.postDate) return false
       const d = new Date(c.postDate)
       return d.getFullYear() === tY && d.getMonth() === tM
     })
-
     const monthFiltered = monthAll.filter(isVid).length > 0 ? monthAll.filter(isVid) : monthAll
-    const sortedMonth = [...monthFiltered].sort((a: any, b: any) =>
-      new Date(a.postDate).getTime() - new Date(b.postDate).getTime()
-    )
-
-    const allPosted = [...filteredContent]
-      .filter((c: any) => c.status === 'POSTED')
-      .sort((a: any, b: any) => new Date(a.updatedAt ?? a.postDate).getTime() - new Date(b.updatedAt ?? b.postDate).getTime())
+    const sortedMonth = [...monthFiltered].sort((a: any, b: any) => new Date(a.postDate).getTime() - new Date(b.postDate).getTime())
+    const allPosted = [...filteredContent].filter((c: any) => c.status === 'POSTED').sort((a: any, b: any) => new Date(a.updatedAt ?? a.postDate).getTime() - new Date(b.updatedAt ?? b.postDate).getTime())
     const lastPostedOverall = allPosted[allPosted.length - 1] ?? null
-
     const postedMonth = sortedMonth.filter((c: any) => c.status === 'POSTED')
-    const upcomingMonth = sortedMonth.filter((c: any) =>
-      c.status !== 'POSTED' && new Date(c.postDate) >= tNow
-    )
-    const needsReviewCount = filteredContent.filter((c: any) =>
-      ['REVIEW','PENDING_APPROVAL','AWAITING_APPROVAL'].includes((c.status ?? '').toUpperCase())
-    ).length
+    const upcomingMonth = sortedMonth.filter((c: any) => c.status !== 'POSTED' && new Date(c.postDate) >= tNow)
+    const needsReviewCount = filteredContent.filter((c: any) => ['REVIEW','PENDING_APPROVAL','AWAITING_APPROVAL'].includes((c.status ?? '').toUpperCase())).length
 
     if (sortedMonth.length > 0) {
       clientMonthTimeline = {
@@ -186,9 +146,7 @@ async function getStats(userId: string, role: string) {
     }
   }
 
-  const totalUsers = canSeeTeamCount
-    ? await safe(() => sbCount('users', {}), 0)
-    : null
+  const totalUsers = canSeeTeamCount ? await safe(() => sbCount('users', {}), 0) : null
 
   let monthlyIncome = 0
   let monthlyExpense = 0
@@ -209,7 +167,6 @@ async function getStats(userId: string, role: string) {
       }
     }
 
-    // Top projects by income
     const incomeByProject = new Map<string, { project: string; client: string | null; amount: number }>()
     for (const t of transactions) {
       if (t.type === 'INCOME' && t.projectId) {
@@ -225,13 +182,10 @@ async function getStats(userId: string, role: string) {
         }
       }
     }
-    topClients = Array.from(incomeByProject.values())
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5)
-      .filter(c => c.amount > 0)
+    topClients = Array.from(incomeByProject.values()).sort((a, b) => b.amount - a.amount).slice(0, 5).filter(c => c.amount > 0)
   }
 
-  // Engagement metrics — top content by views
+  // Top content metrics — deduped by content_id
   const rawMetrics = await safe(
     () => sbSelect('content_metrics', {
       select: '*,content:content!content_id(id,title,type,project:projects!projectId(id,name,clientId))',
@@ -246,12 +200,9 @@ async function getStats(userId: string, role: string) {
     if (seenMetrics.has(m.content_id)) return false
     seenMetrics.add(m.content_id); return true
   })
-
-  // Filter top content metrics to client's own projects only to prevent data leakage
   const filteredMetrics = role === 'CLIENT'
     ? dedupedMetrics.filter((m: any) => m.content?.project && clientProjectIds.includes(m.content.projectId))
     : dedupedMetrics
-
   const topMetrics = filteredMetrics.slice(0, 5)
 
   let clientOutstanding = 0
@@ -269,10 +220,7 @@ async function getStats(userId: string, role: string) {
     if (projectIds.length > 0) {
       clientTransactions = await safe(() => sbSelect('transactions', {
         select: 'id,amount,projectId,type',
-        filters: {
-          type: 'eq.INCOME',
-          projectId: `in.(${projectIds.join(',')})`
-        }
+        filters: { type: 'eq.INCOME', projectId: `in.(${projectIds.join(',')})` }
       }), [] as any[])
     }
 
@@ -308,7 +256,7 @@ async function getStats(userId: string, role: string) {
     }
   }
 
-  // --- 60% completion check for SOP Level 4 scripting follow-up ---
+  // SOP scripting follow-up alerts
   const pendingScriptingAlerts: { id: string; name: string; posted: number; total: number; pct: number }[] = []
   if (isAdmin || isManager) {
     const activeProjectsList = await safe(() => sbSelect('projects', {
@@ -338,15 +286,9 @@ async function getStats(userId: string, role: string) {
         const totalTracked = trackedItems.length
         const postedTracked = trackedItems.filter((c: any) => c.status === 'POSTED').length
         const pct = totalTracked > 0 ? Math.round((postedTracked / totalTracked) * 100) : 0
-        
+
         if (totalTracked > 0 && pct >= 60 && (!p.sopLevel || p.sopLevel < 4)) {
-          pendingScriptingAlerts.push({
-            id: p.id,
-            name: p.name,
-            posted: postedTracked,
-            total: totalTracked,
-            pct,
-          })
+          pendingScriptingAlerts.push({ id: p.id, name: p.name, posted: postedTracked, total: totalTracked, pct })
         }
       }
     }
@@ -354,23 +296,65 @@ async function getStats(userId: string, role: string) {
 
   return {
     totalTasks, todoTasks, urgentTasks, overdueTasks,
-    totalContent, editingContent,
-    totalProjects, activeProjects,
+    totalContent, totalProjects, activeProjects,
     totalUsers,
     recentTasks: (recentTasks as any[]).slice(0, 6),
     recentContent: filteredContent.slice(0, 5),
     upcomingEvents: filteredEvents,
-    monthlyIncome,
-    monthlyExpense,
+    monthlyIncome, monthlyExpense,
     topClients,
     topMetrics,
-    clientOutstanding,
-    clientPaid,
-    clientTotalValue,
+    clientOutstanding, clientPaid, clientTotalValue,
     pendingLoans,
     pendingScriptingAlerts,
     clientMonthTimeline,
   }
+}
+
+// ── Dashboard section wrapper ───────────────────────────────
+function Section({ title, href, hrefLabel, children }: {
+  title: string
+  href?: string
+  hrefLabel?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="bg-white rounded-lg border border-stone-100 overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-stone-100 flex items-center justify-between">
+        <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-widest">{title}</p>
+        {href && (
+          <Link href={href} className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 transition-colors">
+            {hrefLabel ?? 'View all'} <ArrowUpRight size={10} />
+          </Link>
+        )}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// ── KPI Card ────────────────────────────────────────────────
+function KpiCard({ label, value, sub, alert, icon: Icon, iconColor }: {
+  label: string; value: string | number; sub?: string
+  alert?: string | null; icon: any; iconColor?: string
+}) {
+  return (
+    <div className="bg-white rounded-lg border border-stone-100 p-4">
+      <div className="flex items-start justify-between mb-3">
+        <div className={`p-2 rounded-lg bg-stone-50 ${iconColor ?? 'text-stone-500'}`}>
+          <Icon size={15} />
+        </div>
+        {alert && (
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+            <AlertCircle size={9} /> {alert}
+          </span>
+        )}
+      </div>
+      <p className="text-2xl font-bold text-stone-900 leading-none">{value}</p>
+      <p className="text-[11px] font-medium text-stone-500 mt-1">{label}</p>
+      {sub && <p className="text-[10px] text-stone-400 mt-0.5">{sub}</p>}
+    </div>
+  )
 }
 
 export default async function OverviewPage() {
@@ -383,282 +367,227 @@ export default async function OverviewPage() {
       select: '*',
       filters: { userId: `eq.${user.id}` },
       order: 'read.asc,createdAt.desc',
-    }).then(r => r.slice(0, 5)).catch(() => [] as any[]),
+    }).then(r => r.slice(0, 4)).catch(() => [] as any[]),
   ])
 
   const isAdmin = user.role === 'ADMIN'
   const isClient = user.role === 'CLIENT'
   const monthlyNet = stats.monthlyIncome - stats.monthlyExpense
-  const hasUnreadNotifications = recentNotifications.some((n: any) => !n.read)
+  const hasUnread = recentNotifications.some((n: any) => !n.read)
 
-  const statCards = [
+  // Determine which KPI cards to show
+  const kpiCards = [
     {
-      label: 'Total Tasks',
+      label: 'Active Projects',
+      value: stats.activeProjects,
+      sub: `${stats.totalProjects} total`,
+      icon: FolderKanban,
+      iconColor: 'text-indigo-500',
+    },
+    {
+      label: 'Tasks',
       value: stats.totalTasks,
       sub: `${stats.todoTasks} to do`,
       icon: CheckSquare,
-      iconBg: 'bg-blue-100 text-blue-600',
-      alert: stats.urgentTasks > 0
-        ? `${stats.urgentTasks} urgent`
-        : stats.overdueTasks > 0
-          ? `${stats.overdueTasks} overdue`
-          : null,
+      iconColor: 'text-blue-500',
+      alert: stats.overdueTasks > 0 ? `${stats.overdueTasks} overdue` : stats.urgentTasks > 0 ? `${stats.urgentTasks} urgent` : null,
     },
     {
       label: 'Content Items',
       value: stats.totalContent,
-      sub: `${stats.editingContent} in editing`,
+      sub: `across all projects`,
       icon: FileVideo,
-      iconBg: 'bg-pink-100 text-pink-600',
+      iconColor: 'text-pink-500',
     },
-    {
-      label: 'Projects',
-      value: stats.totalProjects,
-      sub: `${stats.activeProjects} active`,
-      icon: FolderKanban,
-      iconBg: 'bg-violet-100 text-violet-600',
-    },
-    ...(stats.totalUsers !== null
-      ? [{ label: 'Team Members', value: stats.totalUsers, sub: 'All users', icon: Users, iconBg: 'bg-teal-100 text-teal-600' }]
-      : []),
-    ...(isClient
-      ? [
-          {
-            label: 'Outstanding Balance',
-            value: formatMoney(stats.clientOutstanding),
-            sub: stats.clientTotalValue > 0
-              ? `Paid ${formatMoney(stats.clientPaid)} of ${formatMoney(stats.clientTotalValue)}`
-              : 'No contract value set',
-            icon: IndianRupee,
-            iconBg: stats.clientOutstanding > 0 ? 'bg-amber-100 text-amber-600 font-medium' : 'bg-green-100 text-green-600 font-medium',
-            alert: stats.clientOutstanding > 0 ? 'Payment Left' : null,
-          },
-        ]
-      : []),
+    ...(stats.totalUsers !== null ? [{
+      label: 'Team Members',
+      value: stats.totalUsers,
+      sub: 'All users',
+      icon: Users,
+      iconColor: 'text-teal-500',
+    }] : []),
+    ...(isClient ? [{
+      label: 'Outstanding Balance',
+      value: formatMoney(stats.clientOutstanding),
+      sub: stats.clientTotalValue > 0 ? `Paid ${formatMoney(stats.clientPaid)} of ${formatMoney(stats.clientTotalValue)}` : 'No contract value set',
+      icon: IndianRupee,
+      iconColor: stats.clientOutstanding > 0 ? 'text-amber-500' : 'text-green-500',
+      alert: stats.clientOutstanding > 0 ? 'Balance due' : null,
+    }] : []),
   ]
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <OverviewTopBar name={user.name} />
+      <TopBar title="Overview" />
 
-      <div className="flex-1 overflow-y-auto p-5 space-y-5">
-        {/* Scripting follow-up alerts (60% threshold reached) */}
-        {(isAdmin || user.role === 'MANAGER') && stats.pendingScriptingAlerts && stats.pendingScriptingAlerts.length > 0 && (
+      <div className="flex-1 overflow-y-auto p-5 space-y-4">
+
+        {/* ── SOP / Scripting alerts ──────────────────────── */}
+        {(isAdmin || user.role === 'MANAGER') && stats.pendingScriptingAlerts.length > 0 && (
           <div className="space-y-2">
             {stats.pendingScriptingAlerts.map((alert: any) => (
-              <div key={alert.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50 border border-amber-250 rounded-lg px-4 py-3 shadow-sm">
+              <div key={alert.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
                 <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                  <AlertCircle className="text-amber-600 flex-shrink-0 mt-0.5" size={16} />
+                  <AlertCircle className="text-amber-600 flex-shrink-0 mt-0.5" size={15} />
                   <div>
-                    <p className="text-xs font-bold text-stone-900">
-                      💡 Start Scripting (L4 SOP) for {alert.name}
-                    </p>
-                    <p className="text-[11px] text-stone-600 mt-0.5">
-                      Campaign is at <strong>{alert.pct}%</strong> completion ({alert.posted}/{alert.total} videos posted). Scripting team should start SOP Level 4 script approval for the next month&apos;s batch.
+                    <p className="text-xs font-semibold text-stone-900">Start Scripting (L4) — {alert.name}</p>
+                    <p className="text-[11px] text-stone-500 mt-0.5">
+                      {alert.pct}% posted ({alert.posted}/{alert.total}). Time to begin next month&apos;s script approval.
                     </p>
                   </div>
                 </div>
                 <Link
                   href={`/sop?projectId=${alert.id}`}
-                  className="text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3.5 py-1.5 rounded transition-colors text-center whitespace-nowrap self-start sm:self-auto"
+                  className="text-[11px] font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded transition-colors whitespace-nowrap self-start sm:self-auto"
                 >
-                  Configure & Start L4
+                  Open SOP →
                 </Link>
               </div>
             ))}
           </div>
         )}
 
-        {/* Recent notifications */}
+        {/* ── Unread notifications ────────────────────────── */}
         {recentNotifications.length > 0 && (
-          <div className={`bg-white rounded-lg border ${hasUnreadNotifications ? 'border-blue-200' : 'border-stone-100'}`}>
-            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
-              <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide">
-                {isClient ? 'Updates for you' : 'Recent activity'}
-              </p>
-              {hasUnreadNotifications && (
-                <span className="text-[10px] font-medium text-blue-600 bg-blue-50 rounded px-2 py-0.5">
-                  {recentNotifications.filter((n: any) => !n.read).length} new
-                </span>
-              )}
-            </div>
+          <Section title={isClient ? 'Updates' : 'Notifications'}>
             <div className="divide-y divide-stone-50">
               {recentNotifications.map((n: any) => (
                 <Link
                   key={n.id}
                   href={n.link ?? '#'}
-                  className={`block px-4 py-3 hover:bg-stone-50 ${!n.read ? 'bg-blue-50/30' : ''}`}
+                  className={`flex items-start gap-3 px-4 py-2.5 hover:bg-stone-50 transition-colors ${!n.read ? 'bg-blue-50/30' : ''}`}
                 >
-                  <div className="flex items-start gap-2">
-                    {!n.read && <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs leading-snug ${n.read ? 'text-stone-700' : 'font-semibold text-stone-900'}`}>
-                        {n.title}
-                      </p>
-                      <p className="text-[11px] text-stone-500 mt-0.5 leading-snug">{n.message}</p>
-                      <p className="text-[10px] text-stone-400 mt-1">{formatDate(n.createdAt)}</p>
-                    </div>
+                  {!n.read && <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
+                  <div className={`flex-1 min-w-0 ${n.read ? 'pl-4' : ''}`}>
+                    <p className={`text-xs leading-snug truncate ${!n.read ? 'font-semibold text-stone-900' : 'text-stone-600'}`}>{n.title}</p>
+                    <p className="text-[10px] text-stone-400 mt-0.5 truncate">{n.message}</p>
                   </div>
+                  <p className="text-[10px] text-stone-400 flex-shrink-0">{formatDate(n.createdAt)}</p>
                 </Link>
               ))}
+            </div>
+          </Section>
+        )}
+
+        {/* ── KPI cards ───────────────────────────────────── */}
+        <div className={`grid gap-3 ${kpiCards.length <= 3 ? 'grid-cols-2 lg:grid-cols-3' : 'grid-cols-2 lg:grid-cols-4'}`}>
+          {kpiCards.map((card) => (
+            <KpiCard
+              key={card.label}
+              label={card.label}
+              value={card.value}
+              sub={card.sub}
+              alert={(card as any).alert}
+              icon={card.icon}
+              iconColor={card.iconColor}
+            />
+          ))}
+        </div>
+
+        {/* ── Finance strip (admin only) ───────────────────── */}
+        {isAdmin && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-white rounded-lg border border-stone-100 p-4">
+              <div className="flex items-center gap-2 mb-1.5">
+                <TrendingUp size={13} className="text-green-500" />
+                <p className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Income · This Month</p>
+              </div>
+              <p className="text-lg font-bold text-stone-900">{formatMoney(stats.monthlyIncome)}</p>
+            </div>
+            <div className="bg-white rounded-lg border border-stone-100 p-4">
+              <div className="flex items-center gap-2 mb-1.5">
+                <TrendingDown size={13} className="text-red-400" />
+                <p className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Expense · This Month</p>
+              </div>
+              <p className="text-lg font-bold text-stone-900">{formatMoney(stats.monthlyExpense)}</p>
+            </div>
+            <div className="bg-white rounded-lg border border-stone-100 p-4">
+              <div className="flex items-center gap-2 mb-1.5">
+                <IndianRupee size={13} className={monthlyNet >= 0 ? 'text-indigo-500' : 'text-red-400'} />
+                <p className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Net · This Month</p>
+              </div>
+              <p className={`text-lg font-bold ${monthlyNet >= 0 ? 'text-stone-900' : 'text-red-600'}`}>{formatMoney(monthlyNet)}</p>
+            </div>
+            <div className="bg-white rounded-lg border border-stone-100 p-4">
+              <div className="flex items-center gap-2 mb-1.5">
+                <TrendingDown size={13} className="text-amber-500" />
+                <p className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Loans Outstanding</p>
+              </div>
+              <p className="text-lg font-bold text-stone-900">{formatMoney(stats.pendingLoans)}</p>
             </div>
           </div>
         )}
 
-        {/* Stat cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {statCards.map((card) => {
-            const Icon = card.icon
-            return (
-              <div key={card.label} className="stat-card">
-                <div className="flex items-start justify-between mb-3">
-                  <div className={`p-2.5 rounded-xl ${ (card as any).iconBg ?? 'bg-stone-100 text-stone-600'}`}>
-                    <Icon size={16} />
-                  </div>
-                  {(card as any).alert && (
-                    <div className="flex items-center gap-1 text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
-                      <AlertCircle size={11} />
-                      <span className="text-[10px] font-semibold">{(card as any).alert}</span>
-                    </div>
-                  )}
-                </div>
-                <p className="text-2xl font-bold text-stone-900 tracking-tight">{card.value}</p>
-                <p className="text-xs text-stone-500 mt-0.5 font-medium">{card.label}</p>
-                <p className="text-[11px] text-stone-400 mt-1">{card.sub}</p>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* ── Client: This Month's Content Timeline ── */}
+        {/* ── Client: Content Timeline ─────────────────────── */}
         {isClient && stats.clientMonthTimeline && (
-          <div className="bg-white rounded-xl border border-stone-100 shadow-sm overflow-hidden">
-            {/* Header */}
-            <div className="px-5 py-3.5 border-b border-stone-100 flex items-center justify-between">
+          <div className="bg-white rounded-lg border border-stone-100 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-stone-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Film size={13} className="text-rose-400" />
-                <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide">
+                <Film size={12} className="text-rose-400" />
+                <p className="text-[11px] font-semibold text-stone-500 uppercase tracking-widest">
                   {new Date().toLocaleString('default', { month: 'long' })} Content
                 </p>
               </div>
-              <Link href="/content" className="text-[10px] text-stone-400 hover:text-stone-700 uppercase tracking-wide">
-                View content →
+              <Link href="/content" className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 transition-colors">
+                View all <ArrowUpRight size={10} />
               </Link>
             </div>
-
-            <div className="p-5 space-y-4">
-              {/* Needs review alert */}
+            <div className="p-4 space-y-4">
               {stats.clientMonthTimeline.needsReview > 0 && (
-                <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 text-[11px] font-semibold text-amber-700">
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-[11px] font-medium text-amber-700">
                   <AlertCircle size={12} className="flex-shrink-0" />
-                  {stats.clientMonthTimeline.needsReview} content item{stats.clientMonthTimeline.needsReview > 1 ? 's' : ''} waiting for your review
+                  {stats.clientMonthTimeline.needsReview} item{stats.clientMonthTimeline.needsReview > 1 ? 's' : ''} waiting for your review
                 </div>
               )}
-
-              {/* Progress bar */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-semibold text-stone-500 uppercase tracking-wide">Posted this month</span>
-                  <span className="text-[11px] font-bold text-stone-700">
-                    {stats.clientMonthTimeline.posted} / {stats.clientMonthTimeline.total}
-                  </span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-medium text-stone-500">Posted this month</span>
+                  <span className="text-[11px] font-bold text-stone-700">{stats.clientMonthTimeline.posted} / {stats.clientMonthTimeline.total}</span>
                 </div>
-                <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+                <div className="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-rose-400 to-pink-500 rounded-full transition-all duration-700"
+                    className="h-full bg-rose-400 rounded-full transition-all duration-500"
                     style={{ width: `${stats.clientMonthTimeline.total > 0 ? Math.round((stats.clientMonthTimeline.posted / stats.clientMonthTimeline.total) * 100) : 0}%` }}
                   />
                 </div>
               </div>
-
-              {/* 4 milestone cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* First Posted */}
-                <div className="bg-stone-50 rounded-lg p-3">
-                  <p className="text-[9px] font-semibold text-stone-400 uppercase tracking-wide mb-1">First Posted</p>
-                  {stats.clientMonthTimeline.firstPosted ? (
-                    <>
-                      <p className="text-xs font-bold text-stone-800 truncate">{stats.clientMonthTimeline.firstPosted.title}</p>
-                      <p className="text-[10px] text-emerald-600 font-medium mt-0.5">{formatDate(stats.clientMonthTimeline.firstPosted.postDate)}</p>
-                    </>
-                  ) : (
-                    <p className="text-[10px] text-stone-400 italic">None yet</p>
-                  )}
-                </div>
-
-                {/* Latest Posted */}
-                <div className="bg-stone-50 rounded-lg p-3">
-                  <p className="text-[9px] font-semibold text-stone-400 uppercase tracking-wide mb-1">Latest Posted</p>
-                  {stats.clientMonthTimeline.lastPosted ? (
-                    <>
-                      <p className="text-xs font-bold text-stone-800 truncate">{stats.clientMonthTimeline.lastPosted.title}</p>
-                      <p className="text-[10px] text-emerald-600 font-medium mt-0.5">
-                        {formatDate(stats.clientMonthTimeline.lastPosted.updatedAt ?? stats.clientMonthTimeline.lastPosted.postDate)}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-[10px] text-stone-400 italic">None yet</p>
-                  )}
-                </div>
-
-                {/* Next Upcoming */}
-                <div className="bg-blue-50 rounded-lg p-3">
-                  <p className="text-[9px] font-semibold text-blue-400 uppercase tracking-wide mb-1">Next Scheduled</p>
-                  {stats.clientMonthTimeline.nextUpcoming ? (
-                    <>
-                      <p className="text-xs font-bold text-stone-800 truncate">{stats.clientMonthTimeline.nextUpcoming.title}</p>
-                      <p className="text-[10px] text-blue-600 font-medium mt-0.5">{formatDate(stats.clientMonthTimeline.nextUpcoming.postDate)}</p>
-                    </>
-                  ) : (
-                    <p className="text-[10px] text-stone-400 italic">All done!</p>
-                  )}
-                </div>
-
-                {/* Last of Month */}
-                <div className="bg-violet-50 rounded-lg p-3">
-                  <p className="text-[9px] font-semibold text-violet-400 uppercase tracking-wide mb-1">Last of Month</p>
-                  {stats.clientMonthTimeline.lastOfMonth ? (
-                    <>
-                      <p className="text-xs font-bold text-stone-800 truncate">{stats.clientMonthTimeline.lastOfMonth.title}</p>
-                      <p className="text-[10px] text-violet-600 font-medium mt-0.5">{formatDate(stats.clientMonthTimeline.lastOfMonth.postDate)}</p>
-                    </>
-                  ) : (
-                    <p className="text-[10px] text-stone-400 italic">—</p>
-                  )}
-                </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                {[
+                  { label: 'First Posted', item: stats.clientMonthTimeline.firstPosted, color: 'text-emerald-600' },
+                  { label: 'Latest Posted', item: stats.clientMonthTimeline.lastPosted, color: 'text-emerald-600' },
+                  { label: 'Next Scheduled', item: stats.clientMonthTimeline.nextUpcoming, color: 'text-blue-600' },
+                  { label: 'Last of Month', item: stats.clientMonthTimeline.lastOfMonth, color: 'text-violet-600' },
+                ].map(({ label, item, color }) => (
+                  <div key={label} className="bg-stone-50 rounded-lg p-2.5">
+                    <p className="text-[9px] font-semibold text-stone-400 uppercase tracking-wide mb-1">{label}</p>
+                    {item ? (
+                      <>
+                        <p className="text-xs font-semibold text-stone-800 truncate">{item.title}</p>
+                        <p className={`text-[10px] font-medium mt-0.5 ${color}`}>{formatDate(item.postDate ?? item.updatedAt)}</p>
+                      </>
+                    ) : (
+                      <p className="text-[10px] text-stone-400 italic">{label === 'Next Scheduled' ? 'All done!' : 'None yet'}</p>
+                    )}
+                  </div>
+                ))}
               </div>
-
-              {/* Timeline list */}
               {stats.clientMonthTimeline.items.length > 0 && (
                 <div className="border border-stone-100 rounded-lg overflow-hidden">
                   <div className="px-3 py-2 bg-stone-50 border-b border-stone-100">
-                    <p className="text-[9px] font-semibold text-stone-500 uppercase tracking-wide">Full Schedule</p>
+                    <p className="text-[9px] font-semibold text-stone-500 uppercase tracking-wide">Schedule</p>
                   </div>
-                  <div className="divide-y divide-stone-50 max-h-64 overflow-y-auto">
+                  <div className="divide-y divide-stone-50 max-h-56 overflow-y-auto">
                     {stats.clientMonthTimeline.items.map((item: any) => {
                       const isPosted = item.status === 'POSTED'
                       const isPast = !isPosted && item.postDate && new Date(item.postDate) < new Date()
                       return (
-                        <div key={item.id} className="flex items-center gap-3 px-3 py-2.5">
-                          <CheckCircle2
-                            size={13}
-                            className={`flex-shrink-0 ${isPosted ? 'text-emerald-500' : 'text-stone-200'}`}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-xs truncate ${isPosted ? 'text-stone-500 line-through' : 'text-stone-800 font-medium'}`}>
-                              {item.title}
-                            </p>
-                          </div>
+                        <div key={item.id} className="flex items-center gap-3 px-3 py-2">
+                          <CheckCircle2 size={12} className={`flex-shrink-0 ${isPosted ? 'text-emerald-500' : 'text-stone-200'}`} />
+                          <p className={`flex-1 text-xs truncate ${isPosted ? 'text-stone-400 line-through' : 'text-stone-800'}`}>{item.title}</p>
                           <div className="flex items-center gap-1.5 flex-shrink-0">
-                            {isPosted && (
-                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Live</span>
-                            )}
-                            {isPast && (
-                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">Late</span>
-                            )}
-                            {!isPosted && !isPast && (
-                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600">Sched.</span>
-                            )}
+                            {isPosted && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Live</span>}
+                            {isPast && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600">Late</span>}
+                            {!isPosted && !isPast && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600">Sched.</span>}
                             <span className="text-[9px] text-stone-400">{formatDate(item.postDate)}</span>
                           </div>
                         </div>
@@ -671,131 +600,55 @@ export default async function OverviewPage() {
           </div>
         )}
 
-        {/* Monthly money strip — admin only */}
-        {isAdmin && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-1.5 rounded-lg bg-green-100">
-                  <TrendingUp size={13} className="text-green-600" />
-                </div>
-                <p className="text-[11px] uppercase tracking-wide text-green-700 font-semibold">Income this month</p>
-              </div>
-              <p className="text-xl font-bold text-green-800">{formatMoney(stats.monthlyIncome)}</p>
-            </div>
-            <div className="rounded-xl border border-red-200 bg-gradient-to-br from-red-50 to-rose-50 p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-1.5 rounded-lg bg-red-100">
-                  <TrendingDown size={13} className="text-red-600" />
-                </div>
-                <p className="text-[11px] uppercase tracking-wide text-red-700 font-semibold">Expense this month</p>
-              </div>
-              <p className="text-xl font-bold text-red-700">{formatMoney(stats.monthlyExpense)}</p>
-            </div>
-            <div className={`rounded-xl border p-4 shadow-sm bg-gradient-to-br ${monthlyNet >= 0 ? 'from-violet-50 to-indigo-50 border-violet-200' : 'from-red-50 to-rose-50 border-red-200'}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`p-1.5 rounded-lg ${monthlyNet >= 0 ? 'bg-violet-100' : 'bg-red-100'}`}>
-                  <IndianRupee size={13} className={monthlyNet >= 0 ? 'text-violet-600' : 'text-red-500'} />
-                </div>
-                <p className={`text-[11px] uppercase tracking-wide font-semibold ${monthlyNet >= 0 ? 'text-violet-700' : 'text-red-700'}`}>Net this month</p>
-              </div>
-              <p className={`text-xl font-bold ${monthlyNet >= 0 ? 'text-violet-800' : 'text-red-700'}`}>
-                {formatMoney(monthlyNet)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-1.5 rounded-lg bg-amber-100">
-                  <TrendingDown size={13} className="text-amber-600" />
-                </div>
-                <p className="text-[11px] uppercase tracking-wide text-amber-700 font-semibold">Pending Loans Owed</p>
-              </div>
-              <p className="text-xl font-bold text-amber-800">{formatMoney(stats.pendingLoans)}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Two-column layout */}
+        {/* ── Main 2-col: Tasks + Events ──────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Active Tasks */}
-          <div className="bg-white rounded-lg border border-stone-100">
-            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
-              <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide">Active Tasks</p>
-              <Link href="/tasks" className="text-[10px] text-stone-400 hover:text-stone-700 uppercase tracking-wide">
-                View all →
-              </Link>
-            </div>
+          <Section title="Active Tasks" href="/tasks" hrefLabel="All tasks">
             <ActiveTasksList recentTasks={stats.recentTasks} isClient={isClient} />
-          </div>
+          </Section>
 
-          {/* Upcoming Events */}
-          <div className="bg-white rounded-lg border border-stone-100">
-            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CalendarIcon size={13} className="text-stone-500" />
-                <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide">This Week</p>
-              </div>
-              <Link href="/calendar" className="text-[10px] text-stone-400 hover:text-stone-700 uppercase tracking-wide">
-                Open calendar →
-              </Link>
-            </div>
+          <Section title="This Week" href="/calendar" hrefLabel="Calendar">
             <div className="divide-y divide-stone-50">
               {stats.upcomingEvents.length === 0 && (
                 <p className="px-4 py-6 text-xs text-stone-400 text-center">Nothing scheduled this week</p>
               )}
               {stats.upcomingEvents.map((event: any) => (
-                <div key={event.id} className="px-4 py-3">
-                  <div className="flex items-start justify-between gap-2 mb-1">
+                <div key={event.id} className="px-4 py-2.5">
+                  <div className="flex items-start justify-between gap-2 mb-0.5">
                     <p className="text-xs font-medium text-stone-900 truncate">{event.title}</p>
                     <Badge className={eventTypeColor(event.type as EventType)}>
                       {EVENT_TYPE_LABELS[event.type as EventType]}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] text-stone-400">
+                  <div className="flex items-center gap-1.5 text-[10px] text-stone-400">
+                    <CalendarIcon size={10} />
                     <span>{formatDate(event.startTime)}</span>
-                    <span>•</span>
+                    <span>·</span>
                     <span>{formatTime(event.startTime)}</span>
-                    {event.project && (
-                      <>
-                        <span>•</span>
-                        <span>{event.project.name}</span>
-                      </>
-                    )}
+                    {event.project && <><span>·</span><span className="truncate">{event.project.name}</span></>}
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </Section>
         </div>
 
-        {/* Bottom row: Content tracker + Top clients (admin) */}
+        {/* ── Content tracker + Top projects (admin) ────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Content Tracker */}
-          <div className="bg-white rounded-lg border border-stone-100">
-            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
-              <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide">Content Tracker</p>
-              <Link href="/content" className="text-[10px] text-stone-400 hover:text-stone-700 uppercase tracking-wide">
-                View all →
-              </Link>
-            </div>
+          <Section title="Content Tracker" href="/content" hrefLabel="All content">
             <div className="divide-y divide-stone-50">
               {stats.recentContent.length === 0 && (
                 <p className="px-4 py-6 text-xs text-stone-400 text-center">No content items</p>
               )}
               {stats.recentContent.map((item: any) => (
-                <div key={item.id} className="px-4 py-3 flex items-start gap-3">
+                <div key={item.id} className="px-4 py-2.5 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-stone-900 truncate mb-1">{item.title}</p>
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-xs font-medium text-stone-900 truncate">{item.title}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <Badge className={contentStatusColor(item.status as ContentStatus)}>
                         {CONTENT_STATUS_LABELS[item.status as ContentStatus]}
                       </Badge>
-                      <span className="text-[10px] text-stone-400 bg-stone-50 rounded px-1.5 py-0.5">
-                        {item.type}
-                      </span>
-                      {item.project && (
-                        <span className="text-[10px] text-stone-400">{item.project.name}</span>
-                      )}
+                      <span className="text-[10px] text-stone-400">{item.type}</span>
+                      {item.project && <span className="text-[10px] text-stone-400 truncate">· {item.project.name}</span>}
                     </div>
                   </div>
                   {item.assignee && !isClient && (
@@ -804,23 +657,17 @@ export default async function OverviewPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </Section>
 
-          {/* Top earning projects — admin only */}
-          {isAdmin && (
-            <div className="bg-white rounded-lg border border-stone-100">
-              <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
-                <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide">Top Earning Projects</p>
-                <Link href="/finance" className="text-[10px] text-stone-400 hover:text-stone-700 uppercase tracking-wide">
-                  Open finance →
-                </Link>
-              </div>
+          {/* Top earning projects — admin only, otherwise empty state */}
+          {isAdmin ? (
+            <Section title="Top Earning Projects" href="/finance" hrefLabel="Finance">
               <div className="divide-y divide-stone-50">
                 {stats.topClients.length === 0 && (
                   <p className="px-4 py-6 text-xs text-stone-400 text-center">No income recorded yet</p>
                 )}
                 {stats.topClients.map((c, i) => (
-                  <div key={i} className="px-4 py-3 flex items-center justify-between gap-3">
+                  <div key={i} className="px-4 py-2.5 flex items-center justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-stone-900 truncate">{c.project}</p>
                       {c.client && <p className="text-[10px] text-stone-400 mt-0.5">{c.client}</p>}
@@ -829,85 +676,35 @@ export default async function OverviewPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </Section>
+          ) : (
+            // For non-admin: show upcoming notifications or empty to avoid a blank half-width column
+            null
           )}
         </div>
 
-        {/* Document Generator launcher row */}
-        {!isClient && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* LEFT — Document Generator */}
-            <div className="bg-white rounded-lg border border-stone-100">
-              <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
-                <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide">Document Generator</p>
-                <Link
-                  href="/documents"
-                  className="text-[10px] font-semibold text-white bg-stone-800 hover:bg-stone-900 px-3 py-1.5 rounded transition-colors"
-                >
-                  Open →
-                </Link>
-              </div>
-              <div className="p-4 space-y-2.5">
-                <p className="text-[11px] text-stone-400 leading-snug">
-                  Generate professional onboarding documents, MOUs, and MOAs for Taha Media clients in seconds.
-                </p>
-                <div className="space-y-2 pt-1">
-                  {[
-                    { label: 'Client Onboarding', desc: 'Client info · Services · Banking details', color: 'bg-blue-50 text-blue-700 border-blue-100' },
-                    { label: 'MOU', desc: 'Party details · Scope & goals · Terms', color: 'bg-violet-50 text-violet-700 border-violet-100' },
-                    { label: 'MOA', desc: 'Party details · Obligations · Duration', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
-                  ].map((doc) => (
-                    <Link
-                      key={doc.label}
-                      href="/documents"
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg border hover:opacity-80 transition-opacity"
-                      style={{}}
-                    >
-                      <div className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${doc.color} flex-shrink-0`}>
-                        {doc.label}
-                      </div>
-                      <p className="text-[10px] text-stone-400 truncate">{doc.desc}</p>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Engagement Metrics */}
-        {stats.topMetrics.length > 0 && (
-          <div className="bg-white rounded-lg border border-stone-100">
-            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
-              <p className="text-xs font-semibold text-stone-700 uppercase tracking-wide flex items-center gap-1.5">
-                <BarChart2 size={13} /> Top Content Performance
-              </p>
-              <Link href="/content" className="text-[10px] text-stone-400 hover:text-stone-700 uppercase tracking-wide">
-                All content →
-              </Link>
-            </div>
+        {/* ── Top Content Performance (when data exists) ───── */}
+        {topMetrics.length > 0 && (
+          <Section title="Top Content Performance" href="/content" hrefLabel="All content">
             <div className="divide-y divide-stone-50">
-              {stats.topMetrics.map((m: any) => (
-                <div key={m.id} className="px-4 py-3 flex items-center gap-3">
+              {topMetrics.map((m: any) => (
+                <div key={m.id} className="px-4 py-2.5 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-stone-100 text-stone-600 uppercase">{m.platform}</span>
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-stone-100 text-stone-500 uppercase">{m.platform}</span>
                       <p className="text-xs font-medium text-stone-900 truncate">{m.content?.title ?? '—'}</p>
                     </div>
-                    {m.content?.project && (
-                      <p className="text-[10px] text-stone-400">{m.content.project.name}</p>
-                    )}
+                    {m.content?.project && <p className="text-[10px] text-stone-400">{m.content.project.name}</p>}
                   </div>
                   <div className="flex items-center gap-3 text-[10px] text-stone-500 flex-shrink-0">
                     <span className="flex items-center gap-1"><Eye size={10} />{m.views.toLocaleString()}</span>
                     <span className="flex items-center gap-1"><Heart size={10} />{m.likes.toLocaleString()}</span>
                     <span className="flex items-center gap-1"><MessageCircle size={10} />{m.comments.toLocaleString()}</span>
-                    {m.shares > 0 && <span className="flex items-center gap-1"><Share2 size={10} />{m.shares.toLocaleString()}</span>}
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </Section>
         )}
       </div>
     </div>

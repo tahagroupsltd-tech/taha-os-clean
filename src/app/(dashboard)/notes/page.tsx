@@ -35,13 +35,13 @@ export default function NotesPage() {
     if (!activeId && json.data?.length) setActiveId(json.data[0].id)
   }, [activeId])
 
-  useEffect(() => { fetchNotes() }, [])
+  useEffect(() => { fetchNotes() }, [fetchNotes])
 
   // Search debounce
   useEffect(() => {
     const t = setTimeout(() => fetchNotes(search), 250)
     return () => clearTimeout(t)
-  }, [search])
+  }, [search, fetchNotes])
 
   // Load active note into draft
   useEffect(() => {

@@ -9,6 +9,7 @@ import {
   canViewSystemStats, canResetPassword, ROLE_LABEL,
 } from '@/lib/permissions'
 import type { Role } from '@/types'
+import { DataManagement } from '@/components/settings/DataManagement'
 
 export default async function SettingsPage() {
   const user = await getServerUser()
@@ -149,6 +150,10 @@ export default async function SettingsPage() {
               </table>
             </div>
           </div>
+        )}
+        {/* Data Management — ADMIN only */}
+        {user.role === 'ADMIN' && (
+          <DataManagement />
         )}
       </div>
     </div>

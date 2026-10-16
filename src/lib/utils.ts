@@ -151,9 +151,6 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
 export const TRANSACTION_CATEGORY_LABELS: Record<TransactionCategory, string> = {
   CLIENT_PAYMENT: 'Client Payment',
   SALARY: 'Salary',
-  SHOOT_COST: 'Shoot Cost',
-  FREELANCER: 'Freelancer',
-  ADS: 'Ads / Paid Media',
   EQUIPMENT: 'Equipment',
   SOFTWARE: 'Software',
   MARKETING: 'Marketing',

@@ -48,3 +48,5 @@ yarn-debug.log*
 # Coverage
 coverage/
 .nyc_output/
+
+.vercel
