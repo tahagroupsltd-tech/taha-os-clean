@@ -20,8 +20,12 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(identifier.trim(), password)
-      router.push('/overview')
+      const loggedUser = await login(identifier.trim(), password)
+      if (loggedUser?.role === 'CLIENT') {
+        router.push('/portal/overview')
+      } else {
+        router.push('/overview')
+      }
     } catch (err: any) {
       setError(err.message ?? 'Login failed')
     } finally {
@@ -111,6 +115,14 @@ export default function LoginPage() {
             </div>
           )}
         </div>
+
+        {/* Client portal link */}
+        <p className="text-center text-xs text-stone-400 mt-5">
+          Are you a client?{' '}
+          <a href="/client-login" className="text-stone-600 hover:underline font-medium">
+            Client login →
+          </a>
+        </p>
       </div>
     </div>
   )

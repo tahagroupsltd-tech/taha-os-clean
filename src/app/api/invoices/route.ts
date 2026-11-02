@@ -25,13 +25,18 @@ function nextInvoiceNumber(existing: any[]): string {
 export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (user.role !== 'ADMIN' && user.role !== 'MANAGER')
+  if (user.role !== 'ADMIN' && user.role !== 'MANAGER' && user.role !== 'CLIENT')
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
   const filters: Record<string, string> = {}
   if (status) filters.status = `eq.${status}`
+
+  // CLIENT: only return invoices where client_id matches their user id
+  if (user.role === 'CLIENT') {
+    filters.client_id = `eq.${user.id}`
+  }
 
   const rows = await sbSelect('invoices', {
     select: INVOICE_SELECT,

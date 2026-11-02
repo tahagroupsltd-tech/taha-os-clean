@@ -684,10 +684,10 @@ export default async function OverviewPage() {
         </div>
 
         {/* ── Top Content Performance (when data exists) ───── */}
-        {topMetrics.length > 0 && (
+        {stats.topMetrics?.length > 0 && (
           <Section title="Top Content Performance" href="/content" hrefLabel="All content">
             <div className="divide-y divide-stone-50">
-              {topMetrics.map((m: any) => (
+              {stats.topMetrics.map((m: any) => (
                 <div key={m.id} className="px-4 py-2.5 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">

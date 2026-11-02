@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server'
 import { getUserFromRequest } from '@/lib/auth'
 
 // Routes that don't require auth
-const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/webhook']
+const PUBLIC_PATHS = ['/login', '/client-login', '/api/auth/login', '/api/webhook']
 
 // Role-based page access (settings is open to all so anyone can change their own password)
 const ROLE_ACCESS: Record<string, string[]> = {
@@ -47,12 +47,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Client role: restrict to specific pages only
+  // Client role: restrict to portal routes only
   if (user.role === 'CLIENT') {
-    const allowedForClient = ['/overview', '/clients', '/settings', '/projects', '/calendar', '/content']
-    const isAllowed = allowedForClient.some((p) => pathname.startsWith(p))
-    if (!isAllowed && !pathname.startsWith('/api')) {
-      return NextResponse.redirect(new URL('/overview', request.url))
+    const isPortalRoute = pathname.startsWith('/portal') || pathname.startsWith('/api/')
+    if (!isPortalRoute) {
+      return NextResponse.redirect(new URL('/portal/overview', request.url))
     }
   }
 

@@ -22,7 +22,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const row = await sbFindOne('invoices', { select: INVOICE_SELECT, filters: { id: `eq.${params.id}` } })
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  if (user.role !== 'ADMIN' && user.role !== 'MANAGER')
+  // Allow ADMIN and MANAGER full access
+  // Allow CLIENT to read their own invoice only
+  if (user.role !== 'ADMIN' && user.role !== 'MANAGER' && user.role !== 'CLIENT')
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  if (user.role === 'CLIENT' && row.client_id !== user.id)
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   return NextResponse.json({ data: row })
