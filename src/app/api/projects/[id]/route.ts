@@ -26,19 +26,29 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const isEmployee = user.role === 'EMPLOYEE' || ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
+  const taskFilters: Record<string, string> = { projectId: `eq.${params.id}` }
+  const contentFilters: Record<string, string> = { projectId: `eq.${params.id}` }
+
+  // Restrict employee view to only their assigned work
+  if (isEmployee) {
+    taskFilters.assignedToId = `eq.${user.id}`
+    contentFilters.assigneeId = `eq.${user.id}`
+  }
+
   const [tasks, content, taskCount, contentCount, transactionCount, eventCount, noteCount] = await Promise.all([
     sbSelect('tasks', {
       select: TASK_SELECT,
-      filters: { projectId: `eq.${params.id}` },
+      filters: taskFilters,
       order: 'priority.desc,deadline.asc,createdAt.desc',
     }),
     sbSelect('content', {
       select: CONTENT_SELECT,
-      filters: { projectId: `eq.${params.id}` },
+      filters: contentFilters,
       order: 'createdAt.desc',
     }),
-    sbCount('tasks', { projectId: `eq.${params.id}` }),
-    sbCount('content', { projectId: `eq.${params.id}` }),
+    sbCount('tasks', taskFilters),
+    sbCount('content', contentFilters),
     sbCount('transactions', { projectId: `eq.${params.id}` }),
     sbCount('events', { projectId: `eq.${params.id}` }),
     sbCount('notes', { projectId: `eq.${params.id}` }),
