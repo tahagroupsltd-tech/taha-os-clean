@@ -5,9 +5,9 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, CheckSquare, FileVideo, FolderKanban,
   Users, Settings, LogOut, Menu, X,
-  Calendar, StickyNote, Wallet, ClipboardList, IndianRupee, CalendarRange,
-  TrendingUp, UserCircle, Target, ChevronDown, ChevronRight, BookMarked, Sparkles,
-  FileText, Receipt,
+  Calendar, Wallet, ClipboardList,
+  Target, ChevronDown, ChevronRight, BookMarked,
+  FileText, IndianRupee, Megaphone, Scale, Briefcase,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -15,59 +15,124 @@ import { useUIStore } from '@/store/ui.store'
 import { useState, useEffect } from 'react'
 import { TAHA_LOGO } from '@/lib/logo'
 
-const NAV_ITEMS = [
-  { href: '/overview',  label: 'Overview',      icon: LayoutDashboard, roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-violet-400' },
-  { href: '/tasks',     label: 'Tasks',          icon: CheckSquare,     roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR'],          color: 'text-blue-400'   },
-  { href: '/calendar',  label: 'Calendar',       icon: Calendar,        roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-cyan-400'   },
-  { href: '/content',   label: 'Content',        icon: FileVideo,       roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-pink-400'   },
-  { href: '/schedule',  label: 'Bulk Schedule',  icon: CalendarRange,   roles: ['ADMIN','MANAGER'],                     color: 'text-orange-400' },
-  { href: '/notes',     label: 'Notes',          icon: StickyNote,      roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR'],          color: 'text-yellow-400' },
-  { href: '/finance',   label: 'Finance',        icon: Wallet,          roles: ['ADMIN'],                               color: 'text-green-400'  },
-  { href: '/billing',   label: 'Client Billing', icon: IndianRupee,     roles: ['ADMIN'],                               color: 'text-emerald-400'},
-  { href: '/invoices',  label: 'Invoices',       icon: Receipt,         roles: ['ADMIN','MANAGER'],                     color: 'text-lime-400'   },
-  { href: '/projects',  label: 'Projects',       icon: FolderKanban,    roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-indigo-400' },
-  { href: '/reports',   label: 'Daily Reports',  icon: ClipboardList,   roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR'],          color: 'text-sky-400'    },
-  { href: '/team',      label: 'Team',           icon: Users,           roles: ['ADMIN','MANAGER'],                     color: 'text-teal-400'   },
-  { href: '/sop',       label: 'SOP Pipeline',   icon: BookMarked,      roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR'],          color: 'text-amber-400'  },
-  { href: '/ai-tools',  label: 'AI Tools',       icon: Sparkles,        roles: ['ADMIN','MANAGER'],                     color: 'text-purple-400' },
-  { href: '/documents', label: 'Documents',      icon: FileText,        roles: ['ADMIN','MANAGER'],                     color: 'text-amber-400'  },
-  { href: '/settings',  label: 'Settings',       icon: Settings,        roles: ['ADMIN','MANAGER','EMPLOYEE','SCRIPTWRITER','GRAPHIC_DESIGNER','WEB_DESIGNER','EDITOR','CLIENT'], color: 'text-slate-400'  },
-]
+interface NavSection {
+  title: string
+  roles: string[]
+  icon: any
+  items: {
+    href: string
+    label: string
+    icon: any
+    color?: string
+  }[]
+}
 
-const CRM_ITEMS = [
-  { href: '/crm',          label: 'Overview',  icon: TrendingUp  },
-  { href: '/crm/pipeline', label: 'Pipeline',  icon: Target      },
-  { href: '/crm/contacts', label: 'Contacts',  icon: UserCircle  },
-  { href: '/crm/deals',    label: 'Deals',     icon: IndianRupee },
+const SECTIONS: NavSection[] = [
+  {
+    title: 'Management',
+    roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER', 'EDITOR'],
+    icon: LayoutDashboard,
+    items: [
+      { href: '/overview', label: 'Overview', icon: LayoutDashboard, color: 'text-violet-400' },
+      { href: '/calendar', label: 'Calendar', icon: Calendar, color: 'text-cyan-400' },
+    ],
+  },
+  {
+    title: 'Operations',
+    roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER', 'EDITOR'],
+    icon: Briefcase,
+    items: [
+      { href: '/tasks', label: 'My Tasks', icon: CheckSquare, color: 'text-blue-400' },
+      { href: '/projects', label: 'Projects', icon: FolderKanban, color: 'text-indigo-400' },
+      { href: '/sop', label: 'SOP Pipeline', icon: BookMarked, color: 'text-amber-400' },
+    ],
+  },
+  {
+    title: 'Marketing',
+    roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER', 'EDITOR'],
+    icon: Megaphone,
+    items: [
+      { href: '/content', label: 'Content Pipeline', icon: FileVideo, color: 'text-pink-400' },
+      { href: '/schedule', label: 'Bulk Schedule', icon: Calendar, color: 'text-orange-400' },
+    ],
+  },
+  {
+    title: 'Sales',
+    roles: ['ADMIN', 'MANAGER'],
+    icon: Target,
+    items: [
+      { href: '/crm/pipeline', label: 'Sales Pipeline', icon: Target, color: 'text-rose-400' },
+      { href: '/crm/deals', label: 'Deals', icon: IndianRupee, color: 'text-emerald-400' },
+    ],
+  },
+  {
+    title: 'Accounts',
+    roles: ['ADMIN'],
+    icon: Wallet,
+    items: [
+      { href: '/finance', label: 'Finance & Books', icon: Wallet, color: 'text-green-400' },
+      { href: '/invoices', label: 'Invoices & Quotes', icon: IndianRupee, color: 'text-lime-400' },
+    ],
+  },
+  {
+    title: 'HR',
+    roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER', 'EDITOR'],
+    icon: Users,
+    items: [
+      { href: '/reports', label: 'Daily Reports', icon: ClipboardList, color: 'text-sky-400' },
+      { href: '/team', label: 'Team Directory', icon: Users, color: 'text-teal-400' },
+    ],
+  },
+  {
+    title: 'Legal',
+    roles: ['ADMIN', 'MANAGER'],
+    icon: Scale,
+    items: [
+      { href: '/documents', label: 'MOU & Agreements', icon: FileText, color: 'text-amber-400' },
+    ],
+  },
 ]
 
 const ROLE_COLORS: Record<string, string> = {
-  ADMIN:    'bg-violet-500/20 text-violet-300',
-  MANAGER:  'bg-blue-500/20 text-blue-300',
+  ADMIN: 'bg-violet-500/20 text-violet-300',
+  MANAGER: 'bg-blue-500/20 text-blue-300',
   EMPLOYEE: 'bg-cyan-500/20 text-cyan-300',
-  EDITOR:   'bg-cyan-500/20 text-cyan-300',
+  EDITOR: 'bg-cyan-500/20 text-cyan-300',
   SCRIPTWRITER: 'bg-cyan-500/20 text-cyan-300',
   GRAPHIC_DESIGNER: 'bg-cyan-500/20 text-cyan-300',
   WEB_DESIGNER: 'bg-cyan-500/20 text-cyan-300',
-  CLIENT:   'bg-emerald-500/20 text-emerald-300',
+  CLIENT: 'bg-emerald-500/20 text-emerald-300',
 }
 
 export function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const { sidebarOpen, setSidebarOpen } = useUIStore()
-  const [crmOpen, setCrmOpen] = useState(pathname.startsWith('/crm'))
-  
+
+  // Track which sections are open (default all active or relevant open)
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    Management: true,
+    Operations: true,
+    Marketing: true,
+    Sales: true,
+    Accounts: true,
+    HR: true,
+    Legal: true,
+  })
+
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     setMounted(true)
   }, [])
 
+  const toggleSection = (title: string) => {
+    setOpenSections((prev) => ({ ...prev, [title]: !prev[title] }))
+  }
+
   const effectiveRole = user?.role ?? ''
 
-  const visibleItems = NAV_ITEMS.filter(item => user && item.roles.includes(effectiveRole))
-  const showCrm = user && ['ADMIN','MANAGER'].includes(user.role)
-  const crmActive = pathname.startsWith('/crm')
+  // Filter sections visible to current user
+  const visibleSections = SECTIONS.filter((s) => s.roles.includes(effectiveRole))
 
   if (!mounted) {
     return (
@@ -114,83 +179,83 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-2 py-3 overflow-y-auto scrollbar-hidden">
-          <div className="space-y-0.5">
-            {visibleItems.map((item) => {
-              const Icon = item.icon
-              const active = pathname === item.href || pathname.startsWith(item.href + '/')
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={cn(
-                    'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150',
-                    active
-                      ? 'bg-white/10 text-white font-medium'
-                      : 'text-white/50 hover:bg-white/5 hover:text-white/80'
-                  )}
-                >
-                  <Icon
-                    size={15}
-                    className={active ? item.color : 'text-white/30'}
-                  />
-                  {item.label}
-                  {active && (
-                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-current opacity-60" />
-                  )}
-                </Link>
-              )
-            })}
+        {/* 7 Business Functions Accordion Nav */}
+        <nav className="flex-1 px-2 py-3 overflow-y-auto scrollbar-hidden space-y-2">
+          {visibleSections.map((sec) => {
+            const isOpen = openSections[sec.title] ?? true
+            const hasActiveItem = sec.items.some(
+              (item) => pathname === item.href || (item.href !== '/overview' && pathname.startsWith(item.href))
+            )
+            const SecIcon = sec.icon
 
-            {/* CRM Section */}
-            {showCrm && (
-              <div className="pt-1">
+            // Filter items by role if any specific check needed
+            let items = sec.items
+            if (sec.title === 'HR' && user?.role !== 'ADMIN' && user?.role !== 'MANAGER') {
+              items = items.filter((i) => i.href !== '/team')
+            }
+            if (sec.title === 'Management' && user?.role !== 'ADMIN' && user?.role !== 'MANAGER') {
+              items = items.filter((i) => i.href !== '/calendar')
+            }
+
+            if (items.length === 0) return null
+
+            return (
+              <div key={sec.title} className="rounded-lg bg-white/[0.02] border border-white/[0.04] overflow-hidden">
                 <button
-                  onClick={() => setCrmOpen(o => !o)}
-                  className={cn(
-                    'flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm transition-all',
-                    crmActive
-                      ? 'bg-white/10 text-white font-medium'
-                      : 'text-white/50 hover:bg-white/5 hover:text-white/80'
-                  )}
+                  onClick={() => toggleSection(sec.title)}
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-semibold text-white/40 hover:text-white/70 transition-colors uppercase tracking-wider"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <TrendingUp size={15} className={crmActive ? 'text-rose-400' : 'text-white/30'} />
-                    <span>CRM</span>
+                  <div className="flex items-center gap-1.5">
+                    <SecIcon size={12} className={hasActiveItem ? 'text-white' : 'text-white/30'} />
+                    <span className={hasActiveItem ? 'text-white/90 font-bold' : ''}>{sec.title}</span>
                   </div>
-                  {crmOpen
-                    ? <ChevronDown size={12} className="text-white/30" />
-                    : <ChevronRight size={12} className="text-white/30" />
-                  }
+                  {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 </button>
-                {crmOpen && (
-                  <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/10 pl-2">
-                    {CRM_ITEMS.map(item => {
+
+                {isOpen && (
+                  <div className="px-1 pb-1 space-y-0.5">
+                    {items.map((item) => {
                       const Icon = item.icon
-                      const active = pathname === item.href || (item.href !== '/crm' && pathname.startsWith(item.href))
+                      const active = pathname === item.href || (item.href !== '/overview' && pathname.startsWith(item.href))
                       return (
                         <Link
                           key={item.href}
                           href={item.href}
                           onClick={() => setSidebarOpen(false)}
                           className={cn(
-                            'flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-all',
+                            'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all duration-150',
                             active
-                              ? 'bg-white/10 text-white font-medium'
-                              : 'text-white/40 hover:bg-white/5 hover:text-white/70'
+                              ? 'bg-white/10 text-white font-medium shadow-sm'
+                              : 'text-white/50 hover:bg-white/5 hover:text-white/80'
                           )}
                         >
-                          <Icon size={13} className={active ? 'text-rose-400' : 'text-white/25'} />
-                          {item.label}
+                          <Icon size={13} className={active ? item.color : 'text-white/30'} />
+                          <span className="truncate">{item.label}</span>
+                          {active && <span className="ml-auto w-1 h-1 rounded-full bg-current opacity-80" />}
                         </Link>
                       )
                     })}
                   </div>
                 )}
               </div>
-            )}
+            )
+          })}
+
+          {/* Quick Settings Link */}
+          <div className="pt-2">
+            <Link
+              href="/settings"
+              onClick={() => setSidebarOpen(false)}
+              className={cn(
+                'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                pathname === '/settings'
+                  ? 'bg-white/10 text-white font-medium'
+                  : 'text-white/40 hover:bg-white/5 hover:text-white/70'
+              )}
+            >
+              <Settings size={13} className="text-white/30" />
+              <span>Settings</span>
+            </Link>
           </div>
         </nav>
 
@@ -204,10 +269,12 @@ export function Sidebar() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-white/90 truncate">{user?.name}</p>
-              <span className={cn(
-                'text-[9px] font-semibold px-1.5 py-0.5 rounded-sm uppercase tracking-wider',
-                ROLE_COLORS[user?.role ?? ''] ?? 'bg-white/10 text-white/50'
-              )}>
+              <span
+                className={cn(
+                  'text-[9px] font-semibold px-1.5 py-0.5 rounded-sm uppercase tracking-wider',
+                  ROLE_COLORS[user?.role ?? ''] ?? 'bg-white/10 text-white/50'
+                )}
+              >
                 {user?.role?.toLowerCase()}
               </span>
             </div>
@@ -229,10 +296,7 @@ export function Sidebar() {
 export function SidebarToggle() {
   const { setSidebarOpen } = useUIStore()
   return (
-    <button
-      className="lg:hidden p-2 text-stone-500 hover:text-stone-900"
-      onClick={() => setSidebarOpen(true)}
-    >
+    <button className="lg:hidden p-2 text-stone-500 hover:text-stone-900" onClick={() => setSidebarOpen(true)}>
       <Menu size={18} />
     </button>
   )
