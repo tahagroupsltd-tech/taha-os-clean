@@ -18,7 +18,7 @@ import {
   ArrowLeft, CheckSquare, FileVideo, Calendar, User as UserIcon,
   FolderOpen, CalendarRange, BookMarked, Upload, ExternalLink,
   FileText, Film, Image, File, Folder, RefreshCw, Link2, X, AlertCircle, Clock, Trash, Pencil,
-  TrendingUp, TrendingDown, IndianRupee, Plus, Wallet,
+  TrendingUp, TrendingDown, IndianRupee, Plus, Wallet, Percent, ShieldCheck,
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
@@ -371,6 +371,7 @@ export default function ProjectDetailPage() {
   const [income, setIncome] = useState(0)
   const [expenses, setExpenses] = useState(0)
   const [showExpenseModal, setShowExpenseModal] = useState(false)
+  const [showMouModal, setShowMouModal] = useState(false)
   const [expenseForm, setExpenseForm] = useState({ title: '', amount: '', category: 'SHOOT_COST', date: '', notes: '' })
   const [savingExpense, setSavingExpense] = useState(false)
 
@@ -481,6 +482,7 @@ export default function ProjectDetailPage() {
                 <MetaCell icon={<TrendingUp size={11} />} label="Income" value={formatMoney(income)} />
                 <MetaCell icon={<TrendingDown size={11} />} label="Expenses" value={formatMoney(expenses)} />
                 <MetaCell icon={<Wallet size={11} />} label="Net Profit" value={formatMoney(income - expenses)} />
+                <MetaCell icon={<Percent size={11} />} label="Profit Margin" value={`${income > 0 ? Math.round(((income - expenses) / income) * 100) : 0}%`} />
               </>
             )}
             {project.sopLevel != null && (
@@ -498,6 +500,55 @@ export default function ProjectDetailPage() {
 
         {/* Drive Files */}
         <DrivePanel projectId={project.id} driveFolder={project.driveFolder} canEdit={canEdit} />
+
+        {/* Legal Agreement / MOU */}
+        <div className="bg-white rounded-lg border border-stone-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+            <p className="text-xs font-semibold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
+              <ShieldCheck size={13} className={project.mouText ? 'text-emerald-600' : 'text-stone-400'} /> Legal Agreement (MOU / Contract)
+            </p>
+            {project.mouText ? (
+              <span className="text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2 py-0.5 rounded-full">
+                Active & Attached
+              </span>
+            ) : (
+              <span className="text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200/60 px-2 py-0.5 rounded-full">
+                MOU Pending
+              </span>
+            )}
+          </div>
+          <div className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            {project.mouText ? (
+              <>
+                <div>
+                  <p className="text-xs font-medium text-stone-800">Formal agreement attached to this project.</p>
+                  <p className="text-[11px] text-stone-400 mt-0.5">Verified contract protects project deliverables, shoot scope, and payment schedule.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => setShowMouModal(true)} className="text-xs h-7">
+                    <FileText size={12} className="mr-1" /> View Agreement
+                  </Button>
+                  <Link href="/documents" className="text-xs text-stone-500 hover:text-stone-900 border border-stone-200 px-2.5 py-1 rounded hover:bg-stone-50 transition-colors">
+                    Edit in Legal
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="text-xs font-medium text-stone-700">No legal document attached yet.</p>
+                  <p className="text-[11px] text-stone-400 mt-0.5">Ensure terms and scope are documented before commencing production.</p>
+                </div>
+                <Link
+                  href="/documents"
+                  className="inline-flex items-center gap-1 text-xs bg-stone-800 hover:bg-stone-900 text-white font-medium px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <Plus size={12} /> Generate MOU / Agreement
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* Time Logs */}
         {timeLogs.length > 0 && (
@@ -582,7 +633,7 @@ export default function ProjectDetailPage() {
 
           {/* Summary strip */}
           {(income > 0 || expenses > 0) && (
-            <div className="grid grid-cols-3 border-b border-stone-50">
+            <div className="grid grid-cols-2 sm:grid-cols-4 border-b border-stone-50">
               <div className="px-4 py-3 border-r border-stone-50">
                 <p className="text-[10px] font-medium text-stone-400 uppercase tracking-wide flex items-center gap-1">
                   <TrendingUp size={10} className="text-green-500" /> Income
@@ -595,10 +646,18 @@ export default function ProjectDetailPage() {
                 </p>
                 <p className="text-sm font-bold text-red-600 mt-0.5">{formatMoney(expenses)}</p>
               </div>
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-medium text-stone-400 uppercase tracking-wide">Net</p>
+              <div className="px-4 py-3 border-r border-stone-50">
+                <p className="text-[10px] font-medium text-stone-400 uppercase tracking-wide">Net Profit</p>
                 <p className={`text-sm font-bold mt-0.5 ${(income - expenses) >= 0 ? 'text-stone-900' : 'text-red-600'}`}>
                   {formatMoney(income - expenses)}
+                </p>
+              </div>
+              <div className="px-4 py-3">
+                <p className="text-[10px] font-medium text-stone-400 uppercase tracking-wide flex items-center gap-1">
+                  <Percent size={10} className="text-stone-400" /> Margin
+                </p>
+                <p className={`text-sm font-bold mt-0.5 ${((income - expenses) / (income || 1)) >= 0.3 ? 'text-emerald-600' : ((income - expenses) >= 0 ? 'text-stone-900' : 'text-red-600')}`}>
+                  {income > 0 ? `${Math.round(((income - expenses) / income) * 100)}%` : '0%'}
                 </p>
               </div>
             </div>
@@ -714,6 +773,30 @@ export default function ProjectDetailPage() {
                 }}
               >
                 {savingExpense ? 'Saving…' : 'Save Expense'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MOU / Legal Modal */}
+      {showMouModal && project?.mouText && (
+        <Modal open={showMouModal} onClose={() => setShowMouModal(false)} title="Legal Agreement (MOU / Contract)" size="lg">
+          <div className="space-y-4">
+            <div
+              className="max-h-[60vh] overflow-y-auto p-5 bg-stone-50 border border-stone-200 rounded-lg text-xs leading-relaxed text-stone-800"
+              dangerouslySetInnerHTML={{ __html: project.mouText }}
+            />
+            <div className="flex justify-between items-center pt-2">
+              <Button size="sm" variant="secondary" onClick={() => setShowMouModal(false)}>Close</Button>
+              <Button size="sm" onClick={() => {
+                const win = window.open('', '_blank')
+                if (!win) return
+                win.document.write(`<!DOCTYPE html><html><head><title>MOU - ${project.name}</title><style>body{font-family:sans-serif;padding:30px;line-height:1.6;font-size:13px}hr{border:none;border-top:1px solid #ccc;margin:15px 0}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:15px}.row{display:flex;gap:10px;margin-bottom:4px}.lbl{min-width:130px;color:#666}</style></head><body>${project.mouText}</body></html>`)
+                win.document.close()
+                setTimeout(() => win.print(), 300)
+              }}>
+                Print / Save PDF
               </Button>
             </div>
           </div>

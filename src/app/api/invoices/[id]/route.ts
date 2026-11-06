@@ -1,7 +1,8 @@
 // src/app/api/invoices/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getUserFromRequest } from '@/lib/auth'
-import { sbFindOne, sbUpdate, sbDelete, nowTs } from '@/lib/supa'
+import { sbFindOne, sbUpdate, sbDelete, sbInsert, nowTs } from '@/lib/supa'
 import { notify } from '@/lib/notify'
 
 export const dynamic = 'force-dynamic'
@@ -64,11 +65,39 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const updated = await sbUpdate('invoices', { id: `eq.${params.id}` }, patch)
 
-  // Notify owner when invoice is marked PAID
+  // Notify owner when invoice is marked PAID and auto-record in Finance
   if (body.status === 'PAID' && existing.status !== 'PAID') {
     const invoiceRef = existing.invoice_number ? `#${existing.invoice_number}` : `(id: ${params.id.slice(0, 8)})`
     const totalLabel = existing.total ? ` — $${Number(existing.total).toLocaleString()}` : ''
-    // Notify the invoice owner (ADMIN/MANAGER who created it)
+
+    // 1. Auto-record INCOME transaction in Finance (interconnecting Invoices -> Finance)
+    const paidAmount = Number(patch.total !== undefined ? patch.total : existing.total) || 0
+    if (paidAmount > 0) {
+      try {
+        await sbInsert('transactions', {
+          title: `Invoice ${invoiceRef} Payment`,
+          amount: paidAmount,
+          type: 'INCOME',
+          category: 'CLIENT_PAYMENT',
+          notes: `Auto-recorded from paid invoice ${invoiceRef}`,
+          date: nowTs(),
+          ownerId: user.id,
+          projectId: existing.project_id || null,
+          createdAt: nowTs(),
+          updatedAt: nowTs(),
+        })
+        revalidatePath('/overview')
+        revalidatePath('/billing')
+        revalidatePath('/finance')
+        if (existing.project_id) {
+          revalidatePath(`/projects/${existing.project_id}`)
+        }
+      } catch (err) {
+        console.error('[invoice->finance] failed to auto-insert transaction:', err)
+      }
+    }
+
+    // 2. Notify the invoice owner (ADMIN/MANAGER who created it)
     if (existing.owner_id && existing.owner_id !== user.id) {
       await notify({
         userId: existing.owner_id,

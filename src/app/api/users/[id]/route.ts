@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   const user = await sbFindOne('users', {
-    select: 'id,username,name,phone,email,role,isActive,createdAt,updatedAt',
+    select: 'id,username,name,phone,email,role,isActive,availabilityStatus,createdAt,updatedAt',
     filters: { id: `eq.${params.id}` },
   })
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
@@ -41,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const body = await req.json().catch(() => ({}))
-  const { name, username, phone, email, role, isActive } = body
+  const { name, username, phone, email, role, isActive, availabilityStatus } = body
 
   if (isSelf) {
     if (role && role !== me.role) {
@@ -85,6 +85,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (email !== undefined) patch.email = email === null || email === '' ? null : email.trim()
   if (role !== undefined) patch.role = role
   if (isActive !== undefined) patch.isActive = isActive
+  if (availabilityStatus !== undefined) patch.availabilityStatus = availabilityStatus
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
@@ -93,7 +94,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   await sbUpdate('users', { id: `eq.${params.id}` }, patch)
 
   const updated = await sbFindOne('users', {
-    select: 'id,username,name,phone,email,role,isActive,createdAt',
+    select: 'id,username,name,phone,email,role,isActive,availabilityStatus,createdAt',
     filters: { id: `eq.${params.id}` },
   })
 

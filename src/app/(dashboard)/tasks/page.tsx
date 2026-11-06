@@ -13,7 +13,7 @@ import {
   TASK_STATUS_LABELS, TASK_PRIORITY_LABELS, cn,
   getTaskUrgencyColors
 } from '@/lib/utils'
-import type { Task, TaskStatus, TaskPriority } from '@/types'
+import type { Task, TaskStatus, TaskPriority, AvailabilityStatus } from '@/types'
 import { Plus, Pencil, Trash2, AlertCircle, Play, Square, Clock, Trash } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -53,7 +53,7 @@ const EMPTY_FORM: TaskFormData = {
 export default function TasksPage() {
   const user = useAuthStore((s) => s.user)
   const [tasks, setTasks] = useState<Task[]>([])
-  const [users, setUsers] = useState<{ id: string; name: string }[]>([])
+  const [users, setUsers] = useState<{ id: string; name: string; availabilityStatus?: AvailabilityStatus }[]>([])
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<string>('')
@@ -229,7 +229,33 @@ export default function TasksPage() {
           </div>
           <Input label="Deadline" type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
           {users.length > 0 && (
-            <Select label="Assignee" placeholder="Unassigned" options={users.map((u) => ({ value: u.id, label: u.name }))} value={form.assignedToId} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })} />
+            <>
+              <Select
+                label="Assignee"
+                placeholder="Unassigned"
+                options={users.map((u) => {
+                  const tag = u.availabilityStatus === 'ON_LEAVE' ? ' 🔴 (On Leave)' : u.availabilityStatus === 'ON_SHOOT' ? ' 🟡 (On Shoot)' : ' 🟢 (Available)'
+                  return { value: u.id, label: `${u.name}${tag}` }
+                })}
+                value={form.assignedToId}
+                onChange={(e) => setForm({ ...form, assignedToId: e.target.value })}
+              />
+              {(() => {
+                const assigned = users.find(u => u.id === form.assignedToId)
+                if (!assigned || assigned.availabilityStatus === 'AVAILABLE' || !assigned.availabilityStatus) return null
+                const onLeave = assigned.availabilityStatus === 'ON_LEAVE'
+                return (
+                  <div className={`p-2 rounded-lg text-[11px] flex items-center gap-2 ${
+                    onLeave ? 'bg-rose-50 text-rose-700 border border-rose-200/60' : 'bg-amber-50 text-amber-800 border border-amber-200/60'
+                  }`}>
+                    <AlertCircle size={13} className="flex-shrink-0" />
+                    <span>
+                      <strong>HR Alert:</strong> {assigned.name} is currently <strong>{onLeave ? 'On Leave' : 'On Shoot'}</strong>. Check availability before assigning.
+                    </span>
+                  </div>
+                )
+              })()}
+            </>
           )}
           {projects.length > 0 && (
             <Select label="Project" placeholder="No project" options={projects.map((p) => ({ value: p.id, label: p.name }))} value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })} />

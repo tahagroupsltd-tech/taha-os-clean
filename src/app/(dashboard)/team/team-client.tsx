@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import type { User, Role } from '@/types'
+import type { User, Role, AvailabilityStatus } from '@/types'
 import {
   canEditUser,
   canDeleteUser,
@@ -77,6 +77,7 @@ interface EditForm {
   email: string
   role: Role
   isActive: boolean
+  availabilityStatus?: AvailabilityStatus
 }
 
 interface DeleteState {
@@ -179,6 +180,7 @@ export function TeamClient({ initialUsers, currentUserId, currentUserRole }: Pro
       email: u.email ?? '',
       role: u.role as Role,
       isActive: u.isActive,
+      availabilityStatus: u.availabilityStatus || 'AVAILABLE',
     })
   }
 
@@ -199,6 +201,7 @@ export function TeamClient({ initialUsers, currentUserId, currentUserRole }: Pro
           email: editForm.email || null,
           role: editForm.role,
           isActive: editForm.isActive,
+          availabilityStatus: editForm.availabilityStatus || 'AVAILABLE',
         }),
       })
       const json = await res.json()
@@ -314,6 +317,7 @@ export function TeamClient({ initialUsers, currentUserId, currentUserRole }: Pro
                   <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Name</th>
                   <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Username</th>
                   <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Role</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Availability</th>
                   <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Status</th>
                   <th className="text-left px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Joined</th>
                   <th className="text-right px-4 py-2.5 font-medium text-stone-400 uppercase tracking-wide whitespace-nowrap">Actions</th>
@@ -353,6 +357,21 @@ export function TeamClient({ initialUsers, currentUserId, currentUserRole }: Pro
                         <Badge className={ROLE_BADGE[user.role as Role]}>
                           {ROLE_LABEL[user.role as Role]}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-medium border ${
+                          user.availabilityStatus === 'ON_LEAVE' ? 'bg-rose-50 border-rose-200/60 text-rose-700' :
+                          user.availabilityStatus === 'ON_SHOOT' ? 'bg-amber-50 border-amber-200/60 text-amber-800' :
+                          'bg-emerald-50 border-emerald-200/60 text-emerald-700'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            user.availabilityStatus === 'ON_LEAVE' ? 'bg-rose-500' :
+                            user.availabilityStatus === 'ON_SHOOT' ? 'bg-amber-500' :
+                            'bg-emerald-500'
+                          }`} />
+                          {user.availabilityStatus === 'ON_LEAVE' ? 'On Leave' :
+                           user.availabilityStatus === 'ON_SHOOT' ? 'On Shoot' : 'Available'}
+                        </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
@@ -514,6 +533,16 @@ export function TeamClient({ initialUsers, currentUserId, currentUserRole }: Pro
                 value={editForm.role}
                 onChange={(e) => setEditForm({ ...editForm, role: e.target.value as Role })}
                 disabled={editForm.id === currentUserId}
+              />
+              <Select
+                label="Availability Status"
+                options={[
+                  { value: 'AVAILABLE', label: '🟢 Available' },
+                  { value: 'ON_SHOOT', label: '🟡 On Shoot' },
+                  { value: 'ON_LEAVE', label: '🔴 On Leave' },
+                ]}
+                value={editForm.availabilityStatus || 'AVAILABLE'}
+                onChange={(e) => setEditForm({ ...editForm, availabilityStatus: e.target.value as AvailabilityStatus })}
               />
             </div>
             <label className="flex items-center gap-2 text-xs text-stone-700 mt-1">

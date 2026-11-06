@@ -28,6 +28,8 @@ export type ContentStatus =
   | 'REVIEW'
   | 'POSTED'
 
+export type AvailabilityStatus = 'AVAILABLE' | 'ON_SHOOT' | 'ON_LEAVE'
+
 export interface AuthUser {
   id: string
   username: string
@@ -35,6 +37,7 @@ export interface AuthUser {
   role: Role
   phone?: string | null
   email?: string | null
+  availabilityStatus?: AvailabilityStatus
 }
 
 export interface User {
@@ -45,6 +48,7 @@ export interface User {
   phone?: string | null
   email?: string | null
   isActive: boolean
+  availabilityStatus?: AvailabilityStatus
   createdAt: string
 }
 
@@ -61,6 +65,8 @@ export interface Project {
   driveFolder?: string | null
   value?: number | null
   sopLevel?: number | null
+  mouText?: string | null
+  mouStatus?: string | null
   assignedToId?: string | null
   assignedTo?: { id: string; name: string } | null
   createdAt: string

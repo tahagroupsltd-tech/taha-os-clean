@@ -2,6 +2,7 @@
 'use client'
 import { SidebarToggle } from './Sidebar'
 import { NotificationBell } from './NotificationBell'
+import { AvailabilityToggle } from './AvailabilityToggle'
 
 interface TopBarProps {
   title: string
@@ -17,11 +18,13 @@ export function TopBar({ title, actions }: TopBarProps) {
           <h1 className="text-sm font-bold text-stone-900 tracking-tight">{title}</h1>
         </div>
         <div className="flex items-center gap-2 md:hidden">
+          <AvailabilityToggle />
           {actions && <div className="flex items-center gap-2">{actions}</div>}
           <NotificationBell />
         </div>
       </div>
-      <div className="hidden md:flex items-center gap-2">
+      <div className="hidden md:flex items-center gap-2.5">
+        <AvailabilityToggle />
         {actions && <div className="flex items-center gap-2">{actions}</div>}
         <NotificationBell />
       </div>

@@ -1,6 +1,7 @@
 'use client'
-import { useState, useRef } from 'react'
-import { ChevronRight, ChevronLeft, FileText, Printer, Copy, RotateCcw, Check } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { ChevronRight, ChevronLeft, FileText, Printer, Copy, RotateCcw, Check, FolderCheck, Building2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 type DocType = 'onboarding' | 'mou' | 'moa'
 
@@ -41,6 +42,58 @@ export default function DocumentsPage() {
   const [preview, setPreview] = useState(false)
   const [copied, setCopied]   = useState(false)
   const previewRef            = useRef<HTMLDivElement>(null)
+
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; client?: { name: string } }>>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('')
+  const [savingProject, setSavingProject] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/projects')
+      .then(r => r.json())
+      .then(j => {
+        if (j?.data) setProjects(j.data)
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleSelectProject = (pId: string) => {
+    setSelectedProjectId(pId)
+    const p = projects.find(x => x.id === pId)
+    if (p) {
+      setData(prev => ({
+        ...prev,
+        cName: prev.cName || p.client?.name || p.name,
+        pBName: prev.pBName || p.client?.name || p.name,
+        pBRep: prev.pBRep || p.client?.name || '',
+      }))
+    }
+  }
+
+  const handleSaveToProject = async () => {
+    if (!selectedProjectId) {
+      toast.error('Please select a project first')
+      return
+    }
+    setSavingProject(true)
+    try {
+      const docHtml = buildDoc()
+      const res = await fetch(`/api/projects/${selectedProjectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mouText: docHtml,
+          mouStatus: 'ACTIVE',
+        }),
+      })
+      if (!res.ok) throw new Error()
+      const p = projects.find(x => x.id === selectedProjectId)
+      toast.success(`Attached & saved to ${p?.name || 'Project'}!`)
+    } catch {
+      toast.error('Failed to attach document to project')
+    } finally {
+      setSavingProject(false)
+    }
+  }
 
   const steps  = STEPS[docType]
   const isLast = step === steps.length - 1
@@ -490,11 +543,36 @@ export default function DocumentsPage() {
     return (
       <div className="flex flex-col h-full overflow-hidden bg-stone-50">
         {/* Preview toolbar */}
-        <div className="flex items-center gap-2 px-5 py-3 bg-white border-b border-stone-100 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 px-5 py-3 bg-white border-b border-stone-100 flex-shrink-0">
           <button onClick={() => setPreview(false)} className="flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-800 transition-colors mr-2">
             <ChevronLeft size={14} /> Back
           </button>
           <div className="flex-1" />
+
+          {projects.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-stone-100/80 p-1 rounded-lg">
+              <select
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="text-xs bg-white border border-stone-200 rounded px-2 py-1 text-stone-700 outline-none max-w-[170px] truncate"
+              >
+                <option value="">Select Project...</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleSaveToProject}
+                disabled={!selectedProjectId || savingProject}
+                className="flex items-center gap-1 text-xs bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded px-2.5 py-1 font-medium transition-colors"
+                title="Attach this legal document directly to the project"
+              >
+                <FolderCheck size={12} />
+                {savingProject ? 'Saving...' : 'Save to Project'}
+              </button>
+            </div>
+          )}
+
           <button onClick={doCopy} className="flex items-center gap-1.5 text-xs border border-stone-200 rounded-lg px-3 py-1.5 hover:bg-stone-50 transition-colors">
             {copied ? <><Check size={12} className="text-emerald-500" /> Copied</> : <><Copy size={12} /> Copy Text</>}
           </button>
@@ -581,6 +659,24 @@ export default function DocumentsPage() {
               Step {step + 1} of {steps.length} — {DOC_TYPES.find(d => d.id === docType)?.label}
             </p>
           </div>
+          {projects.length > 0 && (
+            <div className="mx-6 mt-4 p-3 bg-stone-50 border border-stone-200/70 rounded-lg flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Building2 size={14} className="text-stone-400" />
+                <span className="text-xs text-stone-600 font-medium">Link to Client Project:</span>
+              </div>
+              <select
+                value={selectedProjectId}
+                onChange={(e) => handleSelectProject(e.target.value)}
+                className="text-xs bg-white border border-stone-200 rounded-md px-2.5 py-1.5 text-stone-800 outline-none max-w-xs truncate"
+              >
+                <option value="">None (Custom Client)</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} {p.client?.name ? `(${p.client.name})` : ''}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="px-6 py-5">
             {renderStep()}
           </div>

@@ -12,7 +12,7 @@ export default async function TeamPage() {
   if (!canViewTeam(me.role)) redirect('/overview')
 
   const rows = await sbSelect('users', {
-    select: 'id,username,name,role,phone,email,isActive,createdAt',
+    select: 'id,username,name,role,phone,email,isActive,availabilityStatus,createdAt',
     filters: { role: 'neq.CLIENT' },
     order: 'createdAt.desc',
   }).catch(() => [] as any[])
@@ -25,6 +25,7 @@ export default async function TeamPage() {
     phone: u.phone,
     email: u.email,
     isActive: u.isActive,
+    availabilityStatus: u.availabilityStatus ?? 'AVAILABLE',
     createdAt: u.createdAt,
   }))
 

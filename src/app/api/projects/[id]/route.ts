@@ -93,6 +93,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (body.promise_to_pay_date !== undefined) patch.promise_to_pay_date = body.promise_to_pay_date || null
   if (body.reminder_date !== undefined) patch.reminder_date = body.reminder_date ? new Date(body.reminder_date).toISOString() : null
   if (body.reminder_note !== undefined) patch.reminder_note = body.reminder_note || null
+  if (body.mouText !== undefined) patch.mouText = body.mouText || null
+  if (body.mouStatus !== undefined) patch.mouStatus = body.mouStatus || null
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })

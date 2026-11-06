@@ -184,7 +184,7 @@ export const CONTENT_SELECT =
   '*,assignee:users!assigneeId(id,name),createdBy:users!createdById(id,name),project:projects!projectId(id,name,clientId)'
 
 export const PROJECT_SELECT =
-  'id,name,description,status,boardColumn,sopLevel,value,clientId,startDate,dueDate,driveFolder,createdAt,updatedAt,client:users!clientId(id,name)'
+  'id,name,description,status,boardColumn,sopLevel,value,clientId,startDate,dueDate,driveFolder,mouText,mouStatus,createdAt,updatedAt,client:users!clientId(id,name)'
 
 export const EVENT_SELECT =
   '*,owner:users!ownerId(id,name),project:projects!projectId(id,name,clientId)'

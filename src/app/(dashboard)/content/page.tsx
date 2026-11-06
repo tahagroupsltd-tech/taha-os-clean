@@ -9,11 +9,11 @@ import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { useAuthStore } from '@/store/auth.store'
 import { contentStatusColor, formatDate, CONTENT_STATUS_LABELS } from '@/lib/utils'
-import type { Content, ContentType, ContentStatus } from '@/types'
+import type { Content, ContentType, ContentStatus, AvailabilityStatus } from '@/types'
 import {
   Plus, Pencil, Trash2, ExternalLink,
   LayoutGrid, CalendarDays, ChevronLeft, ChevronRight, X,
-  FileText,
+  FileText, AlertCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -301,7 +301,7 @@ function CalendarView({
 export default function ContentPage() {
   const user = useAuthStore((s) => s.user)
   const [items, setItems] = useState<Content[]>([])
-  const [users, setUsers] = useState<{ id: string; name: string }[]>([])
+  const [users, setUsers] = useState<{ id: string; name: string; availabilityStatus?: AvailabilityStatus }[]>([])
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<string>('')
@@ -643,10 +643,30 @@ export default function ContentPage() {
               className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400 resize-none disabled:opacity-60" />
           </div>
           {users.length > 0 && (
-            <Select label="Assignee" placeholder="Unassigned"
-              options={users.map((u) => ({ value: u.id, label: u.name }))}
-              value={form.assigneeId} onChange={(e) => setForm({ ...form, assigneeId: e.target.value })}
-              disabled={!isAdmin} />
+            <div className="col-span-2">
+              <Select label="Assignee" placeholder="Unassigned"
+                options={users.map((u) => {
+                  const tag = u.availabilityStatus === 'ON_LEAVE' ? ' 🔴 (On Leave)' : u.availabilityStatus === 'ON_SHOOT' ? ' 🟡 (On Shoot)' : ' 🟢 (Available)'
+                  return { value: u.id, label: `${u.name}${tag}` }
+                })}
+                value={form.assigneeId} onChange={(e) => setForm({ ...form, assigneeId: e.target.value })}
+                disabled={!isAdmin} />
+              {(() => {
+                const assigned = users.find(u => u.id === form.assigneeId)
+                if (!assigned || assigned.availabilityStatus === 'AVAILABLE' || !assigned.availabilityStatus) return null
+                const onLeave = assigned.availabilityStatus === 'ON_LEAVE'
+                return (
+                  <div className={`mt-1.5 p-2 rounded-lg text-[11px] flex items-center gap-2 ${
+                    onLeave ? 'bg-rose-50 text-rose-700 border border-rose-200/60' : 'bg-amber-50 text-amber-800 border border-amber-200/60'
+                  }`}>
+                    <AlertCircle size={13} className="flex-shrink-0" />
+                    <span>
+                      <strong>HR Notice:</strong> {assigned.name} is currently <strong>{onLeave ? 'On Leave' : 'On Shoot'}</strong>.
+                    </span>
+                  </div>
+                )
+              })()}
+            </div>
           )}
           {projects.length > 0 && (
             <Select label="Project" placeholder="No project"
