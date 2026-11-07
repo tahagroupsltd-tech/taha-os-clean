@@ -6,8 +6,7 @@ import {
   LayoutDashboard, CheckSquare, FileVideo, FolderKanban,
   Users, Settings, LogOut, Menu, X,
   Calendar, Wallet, ClipboardList,
-  Target, ChevronDown, ChevronRight, BookMarked,
-  FileText, IndianRupee, Megaphone, Scale, Briefcase,
+  Target, BookMarked, FileText, IndianRupee,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -15,80 +14,47 @@ import { useUIStore } from '@/store/ui.store'
 import { useState, useEffect } from 'react'
 import { TAHA_LOGO } from '@/lib/logo'
 
-interface NavSection {
-  title: string
+interface NavGroup {
+  label: string
   roles: string[]
-  icon: any
   items: {
     href: string
     label: string
     icon: any
     color?: string
+    roles?: string[]
   }[]
 }
 
-const SECTIONS: NavSection[] = [
+const NAV_GROUPS: NavGroup[] = [
   {
-    title: 'Management',
+    label: 'Work',
     roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER', 'EDITOR'],
-    icon: LayoutDashboard,
     items: [
       { href: '/overview', label: 'Overview', icon: LayoutDashboard, color: 'text-violet-400' },
-      { href: '/calendar', label: 'Calendar', icon: Calendar, color: 'text-cyan-400' },
-    ],
-  },
-  {
-    title: 'Operations',
-    roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER', 'EDITOR'],
-    icon: Briefcase,
-    items: [
-      { href: '/tasks', label: 'My Tasks', icon: CheckSquare, color: 'text-blue-400' },
-      { href: '/projects', label: 'Projects', icon: FolderKanban, color: 'text-indigo-400' },
-      { href: '/sop', label: 'SOP Pipeline', icon: BookMarked, color: 'text-amber-400' },
-    ],
-  },
-  {
-    title: 'Marketing',
-    roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER', 'EDITOR'],
-    icon: Megaphone,
-    items: [
+      { href: '/tasks', label: 'Tasks', icon: CheckSquare, color: 'text-blue-400' },
       { href: '/content', label: 'Content Pipeline', icon: FileVideo, color: 'text-pink-400' },
-      { href: '/schedule', label: 'Bulk Schedule', icon: Calendar, color: 'text-orange-400' },
+      { href: '/projects', label: 'Projects', icon: FolderKanban, color: 'text-indigo-400' },
+      { href: '/calendar', label: 'Calendar', icon: Calendar, color: 'text-cyan-400', roles: ['ADMIN', 'MANAGER'] },
     ],
   },
   {
-    title: 'Sales',
+    label: 'Business',
     roles: ['ADMIN', 'MANAGER'],
-    icon: Target,
     items: [
+      { href: '/finance', label: 'Finance', icon: Wallet, color: 'text-emerald-400', roles: ['ADMIN'] },
+      { href: '/invoices', label: 'Invoices', icon: IndianRupee, color: 'text-lime-400' },
       { href: '/crm/pipeline', label: 'Sales Pipeline', icon: Target, color: 'text-rose-400' },
-      { href: '/crm/deals', label: 'Deals', icon: IndianRupee, color: 'text-emerald-400' },
     ],
   },
   {
-    title: 'Accounts',
-    roles: ['ADMIN'],
-    icon: Wallet,
-    items: [
-      { href: '/finance', label: 'Finance & Books', icon: Wallet, color: 'text-green-400' },
-      { href: '/invoices', label: 'Invoices & Quotes', icon: IndianRupee, color: 'text-lime-400' },
-    ],
-  },
-  {
-    title: 'HR',
+    label: 'Studio',
     roles: ['ADMIN', 'MANAGER', 'EMPLOYEE', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER', 'EDITOR'],
-    icon: Users,
     items: [
+      { href: '/team', label: 'Team', icon: Users, color: 'text-teal-400', roles: ['ADMIN', 'MANAGER'] },
+      { href: '/sop', label: 'SOP Pipeline', icon: BookMarked, color: 'text-amber-400' },
+      { href: '/documents', label: 'Legal Agreements', icon: FileText, color: 'text-amber-300', roles: ['ADMIN', 'MANAGER'] },
       { href: '/reports', label: 'Daily Reports', icon: ClipboardList, color: 'text-sky-400' },
-      { href: '/team', label: 'Team Directory', icon: Users, color: 'text-teal-400' },
-    ],
-  },
-  {
-    title: 'Legal',
-    roles: ['ADMIN', 'MANAGER'],
-    icon: Scale,
-    items: [
-      { href: '/documents', label: 'MOU & Agreements', icon: FileText, color: 'text-amber-400' },
     ],
   },
 ]
@@ -108,37 +74,22 @@ export function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const { sidebarOpen, setSidebarOpen } = useUIStore()
-
-  // Track which sections are open (default all active or relevant open)
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    Management: true,
-    Operations: true,
-    Marketing: true,
-    Sales: true,
-    Accounts: true,
-    HR: true,
-    Legal: true,
-  })
-
   const [mounted, setMounted] = useState(false)
+
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  const toggleSection = (title: string) => {
-    setOpenSections((prev) => ({ ...prev, [title]: !prev[title] }))
-  }
-
   const effectiveRole = user?.role ?? ''
-
-  // Filter sections visible to current user
-  const visibleSections = SECTIONS.filter((s) => s.roles.includes(effectiveRole))
 
   if (!mounted) {
     return (
       <aside className="fixed top-0 left-0 h-full w-56 z-30 bg-[#0F0F14] border-r border-white/5 lg:translate-x-0 -translate-x-full" />
     )
   }
+
+  // Filter groups visible to user
+  const visibleGroups = NAV_GROUPS.filter((g) => g.roles.includes(effectiveRole))
 
   return (
     <>
@@ -179,81 +130,58 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* 7 Business Functions Accordion Nav */}
-        <nav className="flex-1 px-2 py-3 overflow-y-auto scrollbar-hidden space-y-2">
-          {visibleSections.map((sec) => {
-            const isOpen = openSections[sec.title] ?? true
-            const hasActiveItem = sec.items.some(
-              (item) => pathname === item.href || (item.href !== '/overview' && pathname.startsWith(item.href))
+        {/* Clean, Simple Navigation */}
+        <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-hidden space-y-4">
+          {visibleGroups.map((group) => {
+            const filteredItems = group.items.filter(
+              (item) => !item.roles || item.roles.includes(effectiveRole)
             )
-            const SecIcon = sec.icon
 
-            // Filter items by role if any specific check needed
-            let items = sec.items
-            if (sec.title === 'HR' && user?.role !== 'ADMIN' && user?.role !== 'MANAGER') {
-              items = items.filter((i) => i.href !== '/team')
-            }
-            if (sec.title === 'Management' && user?.role !== 'ADMIN' && user?.role !== 'MANAGER') {
-              items = items.filter((i) => i.href !== '/calendar')
-            }
-
-            if (items.length === 0) return null
+            if (filteredItems.length === 0) return null
 
             return (
-              <div key={sec.title} className="rounded-lg bg-white/[0.02] border border-white/[0.04] overflow-hidden">
-                <button
-                  onClick={() => toggleSection(sec.title)}
-                  className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-semibold text-white/40 hover:text-white/70 transition-colors uppercase tracking-wider"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <SecIcon size={12} className={hasActiveItem ? 'text-white' : 'text-white/30'} />
-                    <span className={hasActiveItem ? 'text-white/90 font-bold' : ''}>{sec.title}</span>
-                  </div>
-                  {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                </button>
-
-                {isOpen && (
-                  <div className="px-1 pb-1 space-y-0.5">
-                    {items.map((item) => {
-                      const Icon = item.icon
-                      const active = pathname === item.href || (item.href !== '/overview' && pathname.startsWith(item.href))
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          onClick={() => setSidebarOpen(false)}
-                          className={cn(
-                            'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all duration-150',
-                            active
-                              ? 'bg-white/10 text-white font-medium shadow-sm'
-                              : 'text-white/50 hover:bg-white/5 hover:text-white/80'
-                          )}
-                        >
-                          <Icon size={13} className={active ? item.color : 'text-white/30'} />
-                          <span className="truncate">{item.label}</span>
-                          {active && <span className="ml-auto w-1 h-1 rounded-full bg-current opacity-80" />}
-                        </Link>
-                      )
-                    })}
-                  </div>
-                )}
+              <div key={group.label} className="space-y-1">
+                <p className="px-2.5 text-[10px] font-bold uppercase tracking-wider text-white/30 mb-1">
+                  {group.label}
+                </p>
+                {filteredItems.map((item) => {
+                  const Icon = item.icon
+                  const active = pathname === item.href || (item.href !== '/overview' && pathname.startsWith(item.href))
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setSidebarOpen(false)}
+                      className={cn(
+                        'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors duration-150',
+                        active
+                          ? 'bg-white/10 text-white font-semibold shadow-xs'
+                          : 'text-white/60 hover:bg-white/5 hover:text-white/90'
+                      )}
+                    >
+                      <Icon size={14} className={active ? item.color : 'text-white/40'} />
+                      <span className="truncate">{item.label}</span>
+                      {active && <span className="ml-auto w-1 h-1 rounded-full bg-white opacity-80" />}
+                    </Link>
+                  )
+                })}
               </div>
             )
           })}
 
-          {/* Quick Settings Link */}
-          <div className="pt-2">
+          {/* Settings */}
+          <div className="pt-2 border-t border-white/5">
             <Link
               href="/settings"
               onClick={() => setSidebarOpen(false)}
               className={cn(
-                'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors',
                 pathname === '/settings'
-                  ? 'bg-white/10 text-white font-medium'
+                  ? 'bg-white/10 text-white font-semibold'
                   : 'text-white/40 hover:bg-white/5 hover:text-white/70'
               )}
             >
-              <Settings size={13} className="text-white/30" />
+              <Settings size={14} className="text-white/40" />
               <span>Settings</span>
             </Link>
           </div>
@@ -261,7 +189,7 @@ export function Sidebar() {
 
         {/* User footer */}
         <div className="p-3 border-t border-white/5">
-          <div className="flex items-center gap-2.5 mb-2 px-3 py-2 rounded-lg bg-white/5">
+          <div className="flex items-center gap-2.5 mb-2 px-2.5 py-2 rounded-lg bg-white/5">
             <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center flex-shrink-0">
               <span className="text-[11px] font-bold text-white">
                 {user?.name?.[0]?.toUpperCase() ?? '?'}
@@ -271,7 +199,7 @@ export function Sidebar() {
               <p className="text-xs font-medium text-white/90 truncate">{user?.name}</p>
               <span
                 className={cn(
-                  'text-[9px] font-semibold px-1.5 py-0.5 rounded-sm uppercase tracking-wider',
+                  'text-[9px] font-semibold px-1.5 py-0.2 rounded-xs uppercase tracking-wider',
                   ROLE_COLORS[user?.role ?? ''] ?? 'bg-white/10 text-white/50'
                 )}
               >
@@ -279,12 +207,13 @@ export function Sidebar() {
               </span>
             </div>
           </div>
+
           <button
-            onClick={logout}
-            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm text-white/30 hover:bg-white/5 hover:text-white/60 transition-colors"
+            onClick={() => logout()}
+            className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-xs text-white/40 hover:text-white/80 hover:bg-white/5 transition-colors"
           >
-            <LogOut size={14} />
-            Sign out
+            <LogOut size={13} />
+            <span>Sign out</span>
           </button>
         </div>
       </aside>
@@ -292,11 +221,14 @@ export function Sidebar() {
   )
 }
 
-// Mobile toggle button used in TopBar
 export function SidebarToggle() {
-  const { setSidebarOpen } = useUIStore()
+  const { toggleSidebar } = useUIStore()
   return (
-    <button className="lg:hidden p-2 text-stone-500 hover:text-stone-900" onClick={() => setSidebarOpen(true)}>
+    <button
+      onClick={toggleSidebar}
+      className="p-1.5 -ml-1.5 rounded-md text-stone-500 hover:text-stone-900 hover:bg-stone-100 lg:hidden transition-colors"
+      aria-label="Toggle navigation"
+    >
       <Menu size={18} />
     </button>
   )

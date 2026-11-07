@@ -2,8 +2,7 @@
 'use client'
 import { SidebarToggle } from './Sidebar'
 import { NotificationBell } from './NotificationBell'
-import { AvailabilityToggle } from './AvailabilityToggle'
-import { GamificationPill } from './GamificationPill'
+import { UserStatusPill } from './UserStatusPill'
 
 interface TopBarProps {
   title: string
@@ -12,22 +11,20 @@ interface TopBarProps {
 
 export function TopBar({ title, actions }: TopBarProps) {
   return (
-    <header className="min-h-[3.5rem] py-2.5 md:py-0 md:h-14 bg-white border-b border-stone-100 flex flex-col md:flex-row md:items-center justify-center md:justify-between px-4 gap-2 md:gap-3 flex-shrink-0 shadow-sm">
+    <header className="min-h-[3.5rem] py-2 md:py-0 md:h-14 bg-white border-b border-stone-100 flex flex-col md:flex-row md:items-center justify-center md:justify-between px-4 gap-2 md:gap-3 flex-shrink-0 shadow-xs">
       <div className="flex items-center justify-between w-full md:w-auto">
         <div className="flex items-center gap-3">
           <SidebarToggle />
           <h1 className="text-sm font-bold text-stone-900 tracking-tight">{title}</h1>
         </div>
         <div className="flex items-center gap-2 md:hidden">
-          <GamificationPill />
-          <AvailabilityToggle />
+          <UserStatusPill />
           {actions && <div className="flex items-center gap-2">{actions}</div>}
           <NotificationBell />
         </div>
       </div>
       <div className="hidden md:flex items-center gap-2.5">
-        <GamificationPill />
-        <AvailabilityToggle />
+        <UserStatusPill />
         {actions && <div className="flex items-center gap-2">{actions}</div>}
         <NotificationBell />
       </div>
