@@ -21,9 +21,9 @@ export async function GET(req: NextRequest) {
   if (excludeRole) filters.role = `neq.${excludeRole}`
 
   const users = await sbSelect('users', {
-    select: 'id,username,name,role,phone,email,isActive,availabilityStatus,createdAt',
+    select: 'id,username,name,role,phone,email,isActive,availabilityStatus,xp,streak,level,lastActiveDate,createdAt',
     filters,
-    order: 'createdAt.desc',
+    order: 'xp.desc.nullslast,createdAt.desc',
   })
 
   return NextResponse.json({ data: users })

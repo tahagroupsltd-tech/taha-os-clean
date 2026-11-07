@@ -38,6 +38,10 @@ export interface AuthUser {
   phone?: string | null
   email?: string | null
   availabilityStatus?: AvailabilityStatus
+  xp?: number
+  streak?: number
+  level?: number
+  lastActiveDate?: string | null
 }
 
 export interface User {
@@ -49,6 +53,10 @@ export interface User {
   email?: string | null
   isActive: boolean
   availabilityStatus?: AvailabilityStatus
+  xp?: number
+  streak?: number
+  level?: number
+  lastActiveDate?: string | null
   createdAt: string
 }
 

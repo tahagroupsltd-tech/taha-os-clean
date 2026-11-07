@@ -5,6 +5,7 @@ import { notify, triggerWhatsAppNotification } from '@/lib/notify'
 import { canDeleteTasks } from '@/lib/permissions'
 import { syncTaskEvent, deleteEntityCalendarEvents } from '@/lib/gcal'
 import { sbFindOne, sbUpdate, sbDelete, TASK_SELECT } from '@/lib/supa'
+import { awardUserXp } from '@/lib/gamification'
 
 export const dynamic = 'force-dynamic'
 
@@ -108,7 +109,34 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }).catch((err) => console.error('[whatsapp-notification] error:', err))
   }
 
-  return NextResponse.json({ data: updated })
+  // Gamification: Award XP to the task DRI when marked DONE
+  let reward = null
+  if (body.status === 'DONE' && before.status !== 'DONE' && updated?.assignedToId) {
+    const now = new Date()
+    const deadline = updated.deadline ? new Date(updated.deadline) : null
+    let xp = 100
+    let reason = '🎯 On-Time Delivery'
+
+    if (deadline) {
+      if (now <= deadline) {
+        const hoursEarly = (deadline.getTime() - now.getTime()) / (1000 * 3600)
+        if (hoursEarly >= 24) {
+          xp = 150
+          reason = '⚡ Speed Demon: 24h Early!'
+        }
+      } else {
+        xp = 40
+        reason = 'Late delivery'
+      }
+    }
+
+    reward = await awardUserXp(updated.assignedToId, xp, true)
+    if (reward) {
+      (reward as any).reason = reason
+    }
+  }
+
+  return NextResponse.json({ data: updated, reward })
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {

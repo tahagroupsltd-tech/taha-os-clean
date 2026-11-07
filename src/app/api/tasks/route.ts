@@ -53,9 +53,22 @@ export async function POST(req: NextRequest) {
 
   if (!title) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
 
-  // Bug 2 fix: employees creating tasks are auto-assigned to themselves
+  // Strict DRI enforcement: Every task must have exactly ONE owner (Co-ownership is forbidden)
   const isEmp = user.role === 'EMPLOYEE' || ['EDITOR', 'SCRIPTWRITER', 'GRAPHIC_DESIGNER', 'WEB_DESIGNER'].includes(user.role)
   const resolvedAssignee = isEmp ? user.id : (assignedToId || null)
+
+  if (!resolvedAssignee) {
+    return NextResponse.json({
+      error: 'A Directly Responsible Individual (DRI) is strictly required for every task. Unassigned tasks are not allowed.',
+    }, { status: 400 })
+  }
+
+  // Strict Deadline enforcement: Every task must have a target deadline date
+  if (!deadline) {
+    return NextResponse.json({
+      error: 'A deadline is strictly required for every task under the DRI framework.',
+    }, { status: 400 })
+  }
 
   const now = nowTs()
   const task = await sbInsert('tasks', {

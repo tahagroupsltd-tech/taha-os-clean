@@ -14,7 +14,8 @@ import {
   canAssignRole,
   ROLE_LABEL,
 } from '@/lib/permissions'
-import { Plus, UserCheck, Pencil, Trash2, UserX, UserPlus, LayoutList, BarChart2, AlertTriangle, RefreshCw } from 'lucide-react'
+import { Plus, UserCheck, Pencil, Trash2, UserX, UserPlus, LayoutList, BarChart2, AlertTriangle, RefreshCw, Trophy, Flame, Zap, Award } from 'lucide-react'
+import { getLevelInfo } from '@/lib/gamification'
 import toast from 'react-hot-toast'
 
 // ── Workload types ────────────────────────────────────────
@@ -98,7 +99,7 @@ export function TeamClient({ initialUsers, currentUserId, currentUserRole }: Pro
   )
   const [users, setUsers] = useState<User[]>(initialUsers)
   const [refreshing, setRefreshing] = useState(false)
-  const [view, setView] = useState<'members' | 'workload'>('members')
+  const [view, setView] = useState<'members' | 'workload' | 'leaderboard'>('members')
   const [workload, setWorkload] = useState<MemberLoad[]>([])
   const [loadingWorkload, setLoadingWorkload] = useState(false)
 
@@ -283,6 +284,12 @@ export function TeamClient({ initialUsers, currentUserId, currentUserRole }: Pro
               >
                 <BarChart2 size={12} /> Workload
               </button>
+              <button
+                onClick={() => setView('leaderboard')}
+                className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded transition-colors ${view === 'leaderboard' ? 'bg-white text-stone-900 shadow-sm font-semibold' : 'text-stone-500 hover:text-stone-700'}`}
+              >
+                <Trophy size={12} className="text-amber-500" /> Leaderboard
+              </button>
             </div>
             {view === 'workload' && (
               <button onClick={fetchWorkload} disabled={loadingWorkload}
@@ -302,6 +309,8 @@ export function TeamClient({ initialUsers, currentUserId, currentUserRole }: Pro
       <div className="flex-1 overflow-y-auto p-5">
         {view === 'workload' ? (
           <WorkloadView data={workload} loading={loadingWorkload} roleLabel={ROLE_LABEL} />
+        ) : view === 'leaderboard' ? (
+          <LeaderboardView users={users} currentUserId={currentUserId} />
         ) : (
         <div className="bg-white rounded-lg border border-stone-100 overflow-hidden">
           <div className="px-4 py-3 border-b border-stone-100 bg-stone-50 flex items-center justify-between">
@@ -744,6 +753,142 @@ function WorkloadView({ data, loading, roleLabel }: {
           {overloaded} member{overloaded > 1 ? 's are' : ' is'} carrying 5+ open tasks — consider redistributing work.
         </p>
       )}
+    </div>
+  )
+}
+
+// ── Leaderboard View ──────────────────────────────────────────
+function LeaderboardView({ users, currentUserId }: { users: User[]; currentUserId: string }) {
+  const sorted = useMemo(() => {
+    return [...users]
+      .filter(u => u.role !== 'CLIENT')
+      .sort((a, b) => (b.xp || 0) - (a.xp || 0))
+  }, [users])
+
+  const top3 = sorted.slice(0, 3)
+
+  return (
+    <div className="space-y-6">
+      {/* Top 3 Podium */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end pt-4">
+        {/* 2nd Place */}
+        {top3[1] && (
+          <div className="bg-white rounded-xl border border-stone-200 p-5 text-center shadow-sm relative">
+            <div className="w-8 h-8 rounded-full bg-stone-100 border border-stone-300 text-stone-600 font-extrabold text-xs flex items-center justify-center absolute -top-4 left-1/2 -translate-x-1/2 shadow-xs">
+              🥈 2
+            </div>
+            <div className="w-12 h-12 rounded-full bg-stone-100 mx-auto mt-2 flex items-center justify-center text-sm font-bold text-stone-700">
+              {top3[1].name[0].toUpperCase()}
+            </div>
+            <h4 className="font-bold text-stone-900 mt-2 text-sm">{top3[1].name}</h4>
+            <p className="text-[10px] text-stone-400 font-mono">@{top3[1].username}</p>
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <span className="text-xs font-bold text-amber-600 font-mono">{(top3[1].xp || 0).toLocaleString()} XP</span>
+              <span className="text-[11px] font-medium text-orange-600 flex items-center gap-0.5"><Flame size={11} className="fill-orange-500" />{top3[1].streak || 1}d</span>
+            </div>
+            <span className="inline-block mt-2 text-[10px] bg-stone-100 text-stone-700 font-semibold px-2 py-0.5 rounded-full">
+              {getLevelInfo(top3[1].xp || 0).badge} {getLevelInfo(top3[1].xp || 0).title}
+            </span>
+          </div>
+        )}
+
+        {/* 1st Place */}
+        {top3[0] && (
+          <div className="bg-gradient-to-b from-amber-50 to-white rounded-xl border-2 border-amber-300 p-6 text-center shadow-md relative md:-translate-y-2">
+            <div className="w-9 h-9 rounded-full bg-amber-400 text-amber-950 font-black text-sm flex items-center justify-center absolute -top-4.5 left-1/2 -translate-x-1/2 shadow-sm ring-4 ring-white">
+              👑
+            </div>
+            <div className="w-14 h-14 rounded-full bg-amber-200 mx-auto mt-1 flex items-center justify-center text-base font-extrabold text-amber-900 ring-2 ring-amber-400/50">
+              {top3[0].name[0].toUpperCase()}
+            </div>
+            <h4 className="font-black text-stone-900 mt-2 text-base">{top3[0].name}</h4>
+            <p className="text-[10px] text-stone-400 font-mono">@{top3[0].username}</p>
+            <div className="mt-3 flex items-center justify-center gap-3">
+              <span className="text-sm font-extrabold text-amber-700 font-mono">{(top3[0].xp || 0).toLocaleString()} XP</span>
+              <span className="text-xs font-bold text-orange-600 flex items-center gap-0.5"><Flame size={13} className="fill-orange-500" />{top3[0].streak || 1}d Streak</span>
+            </div>
+            <span className="inline-block mt-2 text-[11px] bg-amber-100 text-amber-900 font-extrabold px-2.5 py-0.5 rounded-full border border-amber-300">
+              {getLevelInfo(top3[0].xp || 0).badge} {getLevelInfo(top3[0].xp || 0).title} (Lvl {getLevelInfo(top3[0].xp || 0).level})
+            </span>
+          </div>
+        )}
+
+        {/* 3rd Place */}
+        {top3[2] && (
+          <div className="bg-white rounded-xl border border-stone-200 p-5 text-center shadow-sm relative">
+            <div className="w-8 h-8 rounded-full bg-amber-700/10 border border-amber-700/30 text-amber-900 font-extrabold text-xs flex items-center justify-center absolute -top-4 left-1/2 -translate-x-1/2 shadow-xs">
+              🥉 3
+            </div>
+            <div className="w-12 h-12 rounded-full bg-stone-100 mx-auto mt-2 flex items-center justify-center text-sm font-bold text-stone-700">
+              {top3[2].name[0].toUpperCase()}
+            </div>
+            <h4 className="font-bold text-stone-900 mt-2 text-sm">{top3[2].name}</h4>
+            <p className="text-[10px] text-stone-400 font-mono">@{top3[2].username}</p>
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <span className="text-xs font-bold text-amber-600 font-mono">{(top3[2].xp || 0).toLocaleString()} XP</span>
+              <span className="text-[11px] font-medium text-orange-600 flex items-center gap-0.5"><Flame size={11} className="fill-orange-500" />{top3[2].streak || 1}d</span>
+            </div>
+            <span className="inline-block mt-2 text-[10px] bg-stone-100 text-stone-700 font-semibold px-2 py-0.5 rounded-full">
+              {getLevelInfo(top3[2].xp || 0).badge} {getLevelInfo(top3[2].xp || 0).title}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Full Leaderboard Table */}
+      <div className="bg-white rounded-xl border border-stone-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
+          <p className="text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center gap-1.5">
+            <Trophy size={13} className="text-amber-500" /> Agency DRI Power Rankings
+          </p>
+          <span className="text-[11px] text-stone-400">Ranked by Total DRI XP</span>
+        </div>
+        <div className="divide-y divide-stone-50">
+          {sorted.map((u, idx) => {
+            const isMe = u.id === currentUserId
+            const lvl = getLevelInfo(u.xp || 0)
+            return (
+              <div key={u.id} className={`flex items-center gap-4 px-5 py-3 hover:bg-stone-50/50 transition-colors ${isMe ? 'bg-amber-50/30' : ''}`}>
+                <span className={`w-6 text-center font-black text-xs ${idx === 0 ? 'text-amber-500 text-sm' : idx === 1 ? 'text-stone-400' : idx === 2 ? 'text-amber-700' : 'text-stone-400'}`}>
+                  {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                </span>
+
+                <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center font-bold text-xs text-stone-700 flex-shrink-0">
+                  {u.name[0].toUpperCase()}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-stone-900 truncate">
+                      {u.name} {isMe && <span className="text-[10px] text-amber-700 font-normal">(you)</span>}
+                    </p>
+                    <span className="text-[10px] font-medium bg-stone-100 text-stone-600 px-1.5 py-0.2 rounded">
+                      {lvl.badge} Lvl {lvl.level} · {lvl.title}
+                    </span>
+                  </div>
+                  <div className="w-full max-w-xs mt-1.5 flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-400 rounded-full" style={{ width: `${lvl.progressPct}%` }} />
+                    </div>
+                    <span className="text-[9px] text-stone-400">{lvl.progressPct}%</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 text-right flex-shrink-0">
+                  <div className="flex items-center gap-1 text-xs font-bold text-orange-600 bg-orange-50 border border-orange-100 px-2 py-0.5 rounded-full">
+                    <Flame size={12} className="fill-orange-500" />
+                    {u.streak || 1}d
+                  </div>
+                  <div className="w-20 text-right">
+                    <p className="text-xs font-black text-stone-900 font-mono">{(u.xp || 0).toLocaleString()} XP</p>
+                    <p className="text-[9px] text-stone-400">Total Score</p>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }

@@ -69,6 +69,7 @@ export default function TasksPage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [form, setForm] = useState<TaskFormData>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const isStaff = user?.role !== 'ADMIN' && user?.role !== 'MANAGER'
 
   const fetchTasks = useCallback(async () => {
     if (!user) return
@@ -110,15 +111,17 @@ export default function TasksPage() {
 
   const handleSave = async () => {
     if (!form.title.trim()) return toast.error('Title is required')
+    if (!form.deadline) return toast.error('A deadline date is strictly mandatory for every task under the DRI framework')
+    if (!form.assignedToId && !isStaff) return toast.error('A Directly Responsible Individual (DRI) must be assigned')
     setSaving(true)
     try {
-      const payload = { ...form, deadline: form.deadline || null, assignedToId: form.assignedToId || null, projectId: form.projectId || null }
+      const payload = { ...form, deadline: form.deadline, assignedToId: form.assignedToId || null, projectId: form.projectId || null }
       const res = editingTask
         ? await fetch(`/api/tasks/${editingTask.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
         : await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
-      toast.success(editingTask ? 'Task updated' : 'Task created')
+      toast.success(editingTask ? 'Task updated' : 'DRI task created with deadline')
       setModalOpen(false)
       fetchTasks()
     } catch (err: any) {
@@ -135,8 +138,35 @@ export default function TasksPage() {
   }
 
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
-    const res = await fetch(`/api/tasks/${taskId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) })
-    if (res.ok) setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: newStatus } : t))
+    const res = await fetch(`/api/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    const json = await res.json()
+    if (res.ok) {
+      setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: newStatus } : t))
+      if (newStatus === 'DONE' && json.reward) {
+        toast.success(`🎉 +${json.reward.xpEarned} XP Earned! ${json.reward.reason || 'Task Completed!'}`, {
+          icon: '⚡',
+          duration: 4000,
+        })
+        // Refresh auth store to update TopBar XP & Streak
+        fetch('/api/auth/me')
+          .then(r => r.json())
+          .then(j => {
+            if (j?.data && user) {
+              useAuthStore.getState().setUser({
+                ...user,
+                xp: j.data.xp,
+                streak: j.data.streak,
+                level: j.data.level,
+              })
+            }
+          })
+          .catch(() => {})
+      }
+    }
   }
 
   const canEdit = user?.role !== 'CLIENT'
@@ -210,15 +240,15 @@ export default function TasksPage() {
         )}
       </div>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingTask ? 'Edit Task' : 'New Task'}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingTask ? 'Edit Task (DRI Framework)' : 'New Task (DRI · Mandatory Deadline)'}>
         <div className="space-y-3">
-          <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Task title" />
+          <Input label="Task Title *" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Deliverable / Task objective" />
           <div>
             <label className="text-xs font-medium text-stone-600 uppercase tracking-wide block mb-1.5">Description</label>
             <textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Optional description"
+              placeholder="Actionable steps, brief, links..."
               rows={2}
               className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400 resize-none"
             />
@@ -227,12 +257,12 @@ export default function TasksPage() {
             <Select label="Status" options={STATUS_OPTIONS} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as TaskStatus })} />
             <Select label="Priority" options={PRIORITY_OPTIONS} value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as TaskPriority })} />
           </div>
-          <Input label="Deadline" type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+          <Input label="Deadline (Strict Mandatory) *" type="date" required value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
           {users.length > 0 && (
             <>
               <Select
-                label="Assignee"
-                placeholder="Unassigned"
+                label="Directly Responsible Individual (DRI) *"
+                placeholder="Assign DRI (100% Ultimate Ownership)"
                 options={users.map((u) => {
                   const tag = u.availabilityStatus === 'ON_LEAVE' ? ' 🔴 (On Leave)' : u.availabilityStatus === 'ON_SHOOT' ? ' 🟡 (On Shoot)' : ' 🟢 (Available)'
                   return { value: u.id, label: `${u.name}${tag}` }
@@ -240,6 +270,9 @@ export default function TasksPage() {
                 value={form.assignedToId}
                 onChange={(e) => setForm({ ...form, assignedToId: e.target.value })}
               />
+              <p className="text-[10px] text-stone-500 font-medium -mt-1.5">
+                🛡️ <strong>DRI Framework:</strong> Exactly ONE person owns 100% accountability. Co-ownership is forbidden.
+              </p>
               {(() => {
                 const assigned = users.find(u => u.id === form.assignedToId)
                 if (!assigned || assigned.availabilityStatus === 'AVAILABLE' || !assigned.availabilityStatus) return null
@@ -510,22 +543,27 @@ function TaskCard({ task, canEdit, onEdit, onDelete, onStatusChange, isAdmin, is
         <div className="flex items-center gap-1">
           {task.deadline && colors.isOverdue && <AlertCircle size={11} className="text-red-400 animate-pulse" />}
           <span className={cn('text-[10px]', colors.textClasses)}>
-            {task.deadline ? <>{formatDate(task.deadline)}{colors.timeLeftStr && ` · ${colors.timeLeftStr}`}</> : 'No deadline'}
+            {task.deadline ? <>{formatDate(task.deadline)}{colors.timeLeftStr && ` · ${colors.timeLeftStr}`}</> : '🚨 Deadline Required'}
           </span>
         </div>
         {!isClient && (task.assignedTo ? (
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-              <span className="text-[9px] font-bold text-indigo-700">{task.assignedTo.name[0].toUpperCase()}</span>
-            </div>
-            <span className="text-[10px] font-semibold text-stone-600 max-w-[90px] truncate">{task.assignedTo.name.split(' ')[0]}</span>
+          <div className="flex items-center gap-1.5" title={`Directly Responsible Individual (DRI): ${task.assignedTo.name}`}>
+            <span className="text-[9px] font-extrabold text-amber-800 bg-amber-100/70 border border-amber-300/60 px-1 py-0.2 rounded text-center">DRI</span>
+            <span className="text-[10px] font-semibold text-stone-700 max-w-[85px] truncate">{task.assignedTo.name.split(' ')[0]}</span>
           </div>
         ) : (
-          <span className="inline-flex items-center gap-1 text-[9px] font-bold text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-full">
-            ⚠ Unassigned
+          <span className="inline-flex items-center gap-1 text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full">
+            ⚠ DRI Missing
           </span>
         ))}
       </div>
+
+      {task.status === 'DONE' && (
+        <div className="mt-2 pt-1.5 border-t border-stone-100 flex items-center justify-between text-[10px] text-emerald-700">
+          <span className="font-semibold flex items-center gap-1">✓ DRI Delivered</span>
+          <span className="font-mono bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60 font-bold">+100 XP</span>
+        </div>
+      )}
 
       {showStatusSelect && canEdit && (
         <select

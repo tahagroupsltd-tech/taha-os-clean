@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const row = await sbFindOne('users', {
-    select: 'id,username,name,role,phone,email,availabilityStatus',
+    select: 'id,username,name,role,phone,email,availabilityStatus,xp,streak,level,lastActiveDate',
     filters: { id: `eq.${user.id}` },
   }).catch(() => null)
 
@@ -23,6 +23,10 @@ export async function GET(req: NextRequest) {
       phone: row?.phone ?? user.phone ?? null,
       email: row?.email ?? user.email ?? null,
       availabilityStatus: row?.availabilityStatus ?? 'AVAILABLE',
+      xp: row?.xp ?? 0,
+      streak: row?.streak ?? 1,
+      level: row?.level ?? 1,
+      lastActiveDate: row?.lastActiveDate ?? null,
     },
   })
 }
