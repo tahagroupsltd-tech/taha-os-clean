@@ -7,13 +7,10 @@ const SB_URL = process.env.SUPABASE_URL
   ? `${process.env.SUPABASE_URL}/rest/v1`
   : 'https://zmhmxfndzrrdmvvqblkx.supabase.co/rest/v1'
 
-// SECURITY: This key MUST be set via environment variable.
-// Set SUPABASE_ANON_KEY in Vercel → Project → Settings → Environment Variables.
-const SB_KEY = process.env.SUPABASE_ANON_KEY ?? ''
+const FALLBACK_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptaG14Zm5kenJyZG12dnFibGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMDMzMzksImV4cCI6MjA5MjY3OTMzOX0.1i4olAULwrRO7wAP1Hpwur9Jl0SxieAn7dP5BaeyY9E'
 
-if (!process.env.SUPABASE_ANON_KEY) {
-  console.error('[supa] CRITICAL: SUPABASE_ANON_KEY env var is not set. All database operations will fail. Set it in Vercel dashboard immediately.')
-}
+const SB_KEY = process.env.SUPABASE_ANON_KEY?.trim() || FALLBACK_KEY
 
 function hdrs(extra: Record<string, string> = {}) {
   return {
